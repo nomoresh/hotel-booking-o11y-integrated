@@ -83,9 +83,9 @@ hotel-booking-o11y-integrated/
 ## 📊 6. 핵심 모니터링 및 알림 설계 (SLO & Alerts)
 ```text
         지표 (SLI)    |     목표 (SLO)   |                측정 방식 / 임계치
-가용성 (Availability)     99.5%               최근 30일간 HTTP 5XX 에러 비율 전체 요청의 0.5% 미만 유지
-지연 시간 (Latency)        p95 < 200ms             특가 예약 API 요청의 95%가 200ms 이내에 응답 완료
-에러율 (Error Rate)       < 1.0%             Peak Time 시 시스템 예외(Exception) 발생 빈도 1% 미만 제어
+가용성 (Availability)       99.5%               최근 30일간 HTTP 5XX 에러 비율 전체 요청의 0.5% 미만 유지
+지연 시간 (Latency)          p95 < 200ms             특가 예약 API 요청의 95%가 200ms 이내에 응답 완료
+에러율 (Error Rate)         < 1.0%             Peak Time 시 시스템 예외(Exception) 발생 빈도 1% 미만 제어
 
 ```
 
