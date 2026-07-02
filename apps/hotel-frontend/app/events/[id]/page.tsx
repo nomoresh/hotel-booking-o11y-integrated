@@ -1,4 +1,6 @@
+"use client"
 import { notFound } from "next/navigation"
+import { useState, use } from "react"
 import Image from "next/image"
 import Link from "next/link"
 import { ArrowLeft, MapPin, Star, Check, Flame } from "lucide-react"
@@ -6,19 +8,24 @@ import { SiteHeader } from "@/components/site-header"
 import { SiteFooter } from "@/components/site-footer"
 import { BookingPanel } from "@/components/booking-panel"
 import { getHotel } from "@/lib/hotels"
+import { WaitingRoom } from "@/components/waiting-room"
 
 interface EventDetailPageProps {
   params: Promise<{ id: string }>
 }
 
-export default async function EventDetailPage({ params }: EventDetailPageProps) {
-  const { id } = await params
+export default function EventDetailPage({ params }: EventDetailPageProps) {
+  const { id } = use(params)
   const hotel = getHotel(id)
-  
+  const [isWaiting, setIsWaiting] = useState(true)
+  const handleWaitingSuccess = () => {
+    setIsWaiting(false) // 대기 완료 시 대기 창을 닫고 본래 상세페이지 노출
+  }
   if (!hotel) notFound()
 
   return (
     <div className="flex min-h-screen flex-col">
+    <WaitingRoom isOpen={isWaiting} onSuccess={handleWaitingSuccess} />
       <SiteHeader />
       <main className="flex-1">
         <div className="mx-auto max-w-6xl px-4 py-6">

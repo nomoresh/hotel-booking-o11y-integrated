@@ -1,19 +1,41 @@
+"use client"
+
+import { useState } from "react"
+import { useRouter } from "next/navigation"
 import Link from "next/link"
 import Image from "next/image"
 import { CalendarDays, Flame, MapPin, Users } from "lucide-react"
 import { type ResolvedDeal, formatKRW } from "@/lib/hotels"
+import { WaitingRoom } from "@/components/waiting-room"
 
 export function EventDealCard({ deal }: { deal: ResolvedDeal }) {
+  const router = useRouter()
   const { hotel, checkIn, checkOut } = deal
+  const [isWaiting, setIsWaiting] = useState(false)
+  
   const discount = hotel.originalPrice
     ? Math.round((1 - hotel.price / hotel.originalPrice) * 100)
     : 0
   const soldRatio = 1 - deal.deal.remaining / deal.deal.stock
   const low = deal.deal.remaining <= 3 && !deal.soldOut
 
+  const handleImmediatePurchase = (e: React.MouseEvent) => {
+    e.preventDefault() 
+    e.stopPropagation()
+    setIsWaiting(true)
+  }
+
+  const handleWaitingSuccess = () => {
+    setIsWaiting(false)
+    router.push(
+      `/booking/confirmation?hotel=${hotel.id}&in=${checkIn}&out=${checkOut}&guests=${deal.deal.guests}&nights=${deal.deal.nights}&total=${hotel.price}`
+    )
+  }
+
   return (
-    <div className="group flex flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-sm transition-shadow hover:shadow-lg">
-      
+    <div className="group flex flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-sm transition-shadow hover:shadow-lg relative">
+      <WaitingRoom isOpen={isWaiting} onSuccess={handleWaitingSuccess} />
+
       <Link href={deal.soldOut ? "#" : `/events/${hotel.id}`} className="flex flex-col flex-1">
         <div className="relative aspect-[4/3] overflow-hidden">
           <Image
@@ -97,12 +119,13 @@ export function EventDealCard({ deal }: { deal: ResolvedDeal }) {
             매진
           </span>
         ) : (
-          <Link
-            href={`/booking/confirmation?hotel=${hotel.id}&in=${checkIn}&out=${checkOut}&guests=${deal.deal.guests}&nights=${deal.deal.nights}&total=${hotel.price}`}
+          <button
+            type="button"
+            onClick={handleImmediatePurchase}
             className="mt-3 block w-full rounded-xl bg-primary py-2.5 text-center text-sm font-semibold text-primary-foreground transition-opacity hover:opacity-90"
           >
             즉시 결제하기
-          </Link>
+          </button>
         )}
       </div>
 
