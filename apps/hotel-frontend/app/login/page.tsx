@@ -18,7 +18,7 @@ export default function LoginPage() {
     console.log("로그인 시도:", { email, password })
     
     // 임시로 로그인 성공 처리 후 메인이나 특가 페이지로 이동
-    router.push("/search")
+    router.push("/")
   }
 
   return (

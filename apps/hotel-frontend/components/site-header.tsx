@@ -1,7 +1,9 @@
 import Link from "next/link"
 import { Activity, Globe } from "lucide-react"
+import { User, Flame } from "lucide-react"
 
 export function SiteHeader() {
+  const isLoggedIn = false
   return (
     <header className="sticky top-0 z-40 border-b border-border/70 bg-background/80 backdrop-blur-md">
       <div className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-4 px-4">
@@ -30,19 +32,19 @@ export function SiteHeader() {
         </nav>
 
         <div className="flex items-center gap-2">
-          <button
-            type="button"
-            className="hidden items-center gap-1.5 rounded-full px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground sm:flex"
+          <Link
+            href={isLoggedIn ? "/mypage" : "/login"}
+            aria-label="마이페이지"
+            className="rounded-full p-2 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
           >
-            <Globe className="size-4" aria-hidden="true" />
-            KR / EN
-          </button>
-          <button
-            type="button"
+            <User className="size-5" /> 
+          </Link>
+          <Link
+            href="/login" 
             className="rounded-full bg-foreground px-4 py-2 text-sm font-semibold text-background transition-opacity hover:opacity-90"
           >
             로그인
-          </button>
+          </Link>
         </div>
       </div>
     </header>
