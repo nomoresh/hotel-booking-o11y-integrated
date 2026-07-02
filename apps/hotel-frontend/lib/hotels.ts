@@ -131,3 +131,116 @@ export function getHotel(id: string) {
 export function formatKRW(value: number) {
   return "₩" + value.toLocaleString("ko-KR")
 }
+
+/* ---------------------------------------------------------------------------
+ * Flash-sale event deals
+ * 특가 이벤트는 일정·인원·객실·가격이 모두 고정이며, 남은 수량 내에서
+ * 선착순 "구매"만 가능합니다.
+ * ------------------------------------------------------------------------- */
+
+export type EventDeal = {
+  hotelId: string
+  /** 고정 객실 타입 */
+  roomType: string
+  /** 고정 체크인 날짜 offset (오늘 기준 일수) */
+  startOffset: number
+  /** 고정 숙박 일수 */
+  nights: number
+  /** 고정 투숙 인원 */
+  guests: number
+  /** 전체 준비 수량 */
+  stock: number
+  /** 남은 수량 (선착순) */
+  remaining: number
+}
+
+const EVENT_DEALS: EventDeal[] = [
+  {
+    hotelId: "seaside-jeju",
+    roomType: "오션뷰 디럭스 (조식 2인 포함)",
+    startOffset: 14,
+    nights: 2,
+    guests: 2,
+    stock: 20,
+    remaining: 3,
+  },
+  {
+    hotelId: "urban-seoul",
+    roomType: "시티뷰 스탠다드",
+    startOffset: 7,
+    nights: 1,
+    guests: 2,
+    stock: 30,
+    remaining: 11,
+  }
+  // {
+  //   hotelId: "mountain-gangwon",
+  //   roomType: "온천 스위트 (스키패스 포함)",
+  //   startOffset: 21,
+  //   nights: 2,
+  //   guests: 4,
+  //   stock: 15,
+  //   remaining: 2,
+  // },
+  // {
+  //   hotelId: "boutique-busan",
+  //   roomType: "오션뷰 트윈",
+  //   startOffset: 10,
+  //   nights: 1,
+  //   guests: 2,
+  //   stock: 25,
+  //   remaining: 7,
+  // },
+]
+
+function dealDateISO(offset: number) {
+  const d = new Date()
+  d.setDate(d.getDate() + offset)
+  return d.toISOString().slice(0, 10)
+}
+
+export type ResolvedDeal = {
+  hotel: Hotel
+  deal: EventDeal
+  checkIn: string
+  checkOut: string
+  roomTotal: number
+  serviceFee: number
+  total: number
+  soldOut: boolean
+}
+
+function resolveDeal(deal: EventDeal): ResolvedDeal | undefined {
+  const hotel = getHotel(deal.hotelId)
+  if (!hotel) return undefined
+  const checkIn = dealDateISO(deal.startOffset)
+  const checkOut = dealDateISO(deal.startOffset + deal.nights)
+  const roomTotal = hotel.price * deal.nights
+  const serviceFee = Math.round(roomTotal * 0.1)
+  const total = roomTotal + serviceFee
+  return {
+    hotel,
+    deal,
+    checkIn,
+    checkOut,
+    roomTotal,
+    serviceFee,
+    total,
+    soldOut: deal.remaining <= 0,
+  }
+}
+
+export function getEventDeals(): ResolvedDeal[] {
+  return EVENT_DEALS.map(resolveDeal).filter(
+    (d): d is ResolvedDeal => Boolean(d),
+  )
+}
+
+export function getEventDeal(hotelId: string): ResolvedDeal | undefined {
+  const deal = EVENT_DEALS.find((d) => d.hotelId === hotelId)
+  return deal ? resolveDeal(deal) : undefined
+}
+
+export function isEventHotel(hotelId: string) {
+  return EVENT_DEALS.some((d) => d.hotelId === hotelId)
+}

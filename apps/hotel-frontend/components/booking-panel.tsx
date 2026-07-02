@@ -18,6 +18,7 @@ export function BookingPanel({ hotel }: { hotel: Hotel }) {
   const [checkOut, setCheckOut] = useState(todayISO(5))
   const [guests, setGuests] = useState(2)
 
+  // 1. 숙박 일수 계산
   const nights = useMemo(() => {
     const a = new Date(checkIn).getTime()
     const b = new Date(checkOut).getTime()
@@ -25,7 +26,14 @@ export function BookingPanel({ hotel }: { hotel: Hotel }) {
     return Number.isFinite(n) && n > 0 ? n : 1
   }, [checkIn, checkOut])
 
-  const roomTotal = hotel.price * nights
+  // 2. 인원별 가산점 및 총 룸 가격 계산
+  const roomTotal = useMemo(() => {
+    const basePricePerNight = hotel.price
+    const extraGuestFeePerNight = guests > 2 ? (guests - 2) * 20000 : 0
+    return (basePricePerNight + extraGuestFeePerNight) * nights
+  }, [hotel.price, guests, nights])
+
+  // 3. 서비스 수수료 (10%) 및 최종 금액 계산
   const serviceFee = Math.round(roomTotal * 0.1)
   const total = roomTotal + serviceFee
 
@@ -61,7 +69,7 @@ export function BookingPanel({ hotel }: { hotel: Hotel }) {
         <span className="font-heading text-2xl font-extrabold">
           {formatKRW(hotel.price)}
         </span>
-        <span className="text-sm text-muted-foreground">/ 박</span>
+        <span className="text-sm text-muted-foreground">/ 박 (2인 기준)</span>
       </div>
 
       <div className="mt-4 grid gap-2">
@@ -121,12 +129,12 @@ export function BookingPanel({ hotel }: { hotel: Hotel }) {
       <div className="mt-4 space-y-2 border-t border-border pt-4 text-sm">
         <div className="flex justify-between text-muted-foreground">
           <span>
-            {formatKRW(hotel.price)} × {nights}박
+            기본 요금 및 인원 추가 금액 ({nights}박)
           </span>
           <span>{formatKRW(roomTotal)}</span>
         </div>
         <div className="flex justify-between text-muted-foreground">
-          <span>서비스 수수료</span>
+          <span>서비스 수수료 (10%)</span>
           <span>{formatKRW(serviceFee)}</span>
         </div>
         <div className="flex justify-between border-t border-border pt-2 font-heading font-extrabold">

@@ -1,12 +1,12 @@
 import { Sparkles } from "lucide-react"
 import { SiteHeader } from "@/components/site-header"
 import { SiteFooter } from "@/components/site-footer"
-import { HotelCard } from "@/components/hotel-card"
+import { EventDealCard } from "@/components/event-deal-card"
 import { FlashCountdown } from "@/components/flash-countdown"
-import { HOTELS } from "@/lib/hotels"
+import { getEventDeals } from "@/lib/hotels"
 
 export default function EventsPage() {
-  const deals = HOTELS.filter((h) => h.originalPrice)
+  const deals = getEventDeals()
 
   return (
     <div className="flex min-h-screen flex-col">
@@ -36,11 +36,11 @@ export default function EventsPage() {
             오늘의 플래시 딜
           </h2>
           <p className="mt-1 text-sm text-muted-foreground">
-            Today&apos;s flash deals · {deals.length}개 진행 중
+            Today&apos;s flash deals · {deals.length}개 진행 중 · 선착순 구매
           </p>
           <div className="mt-6 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-            {deals.map((hotel) => (
-              <HotelCard key={hotel.id} hotel={hotel} />
+            {deals.map((deal) => (
+              <EventDealCard key={deal.hotel.id} deal={deal} />
             ))}
           </div>
         </section>
