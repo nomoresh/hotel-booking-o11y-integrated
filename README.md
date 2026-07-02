@@ -5,7 +5,7 @@
 ---
 
 ## 🚀 1. 프로젝트 개요 (Introduction)
-본 프로젝트는 호텔 및 항공권 예약 서비스에서 **"특가 이벤트"** 시 발생하는 순간적인 대규모 트래픽(Momental Traffic) 상황을 가정합니다. 클라우드 네이티브 환경에서 이러한 급격한 부하와 인프라 장애 발생 시, 시스템의 신뢰성을 보장하기 위해 **메트릭(Metric), 로그(Log), 추적(Trace)**의 3축 데이터를 단일 화면에서 유기적으로 상관 분석할 수 있는 통합 Observability 아키텍처를 구현했습니다.
+본 프로젝트는 호텔 예약 서비스에서 **"특가 이벤트"** 시 발생하는 순간적인 대규모 트래픽(Momental Traffic) 상황을 가정합니다. 클라우드 네이티브 환경에서 이러한 급격한 부하와 인프라 장애 발생 시, 시스템의 신뢰성을 보장하기 위해 **메트릭(Metric), 로그(Log), 추적(Trace)**의 3축 데이터를 단일 화면에서 유기적으로 상관 분석할 수 있는 통합 Observability 아키텍처를 구현했습니다.
 
 ### ✨ 핵심 차별화 포인트
 - **통합 관찰성 (Unified O11y):** Grafana를 중심으로 메트릭 조회 중 특정 에러 로그를 확인하고, 해당 로그의 `traceId`를 통해 분산 추적(Tempo)으로 즉시 점프하는 단일 화면 분석 체계 구축.
@@ -49,7 +49,7 @@
 
 ### 🧩 [1] 마이크로서비스 구조 (MSA Components)
 서비스는 느슨한 결합(Loose Coupling) 구조로 설계되어 대규모 트래픽 인입 시 예약 시스템의 부하가 검색 인프라에 영향을 주지 않도록 격리했습니다.
-- **`hotel-frontend` (Next.js):** v0 기반으로 고도화된 특가 상품 노출 및 실시간 예약 대시보드 UI.
+- **`hotel-frontend` (Next.js):** 특가 상품 노출 및 실시간 예약 대시보드 UI.
 - **`search-service`:** 전체 호텔 및 리조트 정보 조회를 담당하며, 트래픽 분산을 위해 인메모리 캐싱 적용.
 - **`event-service`:** 실시간 특가 항공권/숙소 선착순 예약 처리. Redis를 이용한 분산 락 및 대기열 검증 구조.
 - **`notice-service`:** 예약 완료 후 비동기로 알림 전송 (분산 추적 컨텍스트 전파 검증용).
@@ -66,7 +66,7 @@
 ```text
 hotel-booking-o11y-integrated/
 ├── apps/                         # 마이크로서비스 애플리케이션 소스 코드
-│   ├── hotel-frontend/           # v0 활용 Next.js 프론트엔드 웹 앱
+│   ├── hotel-frontend/           # Next.js 프론트엔드 웹 앱
 │   ├── search-service/           # 호텔 조회 서비스
 │   └── event-service/            # 특가 선착순 예약 서비스
 ├── infra/                        # 인프라 프로비저닝 및 K8s 매니페스트
@@ -83,9 +83,9 @@ hotel-booking-o11y-integrated/
 ## 📊 6. 핵심 모니터링 및 알림 설계 (SLO & Alerts)
 ```text
         지표 (SLI)    |     목표 (SLO)   |                측정 방식 / 임계치
-가용성 (Availability)     99.5%               최근 30일간 HTTP 5XX 에러 비율 전체 요청의 0.5% 미만 유지
-지연 시간 (Latency)        p95 < 200ms             특가 예약 API 요청의 95%가 200ms 이내에 응답 완료
-에러율 (Error Rate)       < 1.0%             Peak Time 시 시스템 예외(Exception) 발생 빈도 1% 미만 제어
+가용성 (Availability)       99.5%               최근 30일간 HTTP 5XX 에러 비율 전체 요청의 0.5% 미만 유지
+지연 시간 (Latency)          p95 < 200ms             특가 예약 API 요청의 95%가 200ms 이내에 응답 완료
+에러율 (Error Rate)         < 1.0%             Peak Time 시 시스템 예외(Exception) 발생 빈도 1% 미만 제어
 
 ```
 
