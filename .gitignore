@@ -1,0 +1,20 @@
+# Terraform 다운로드 파일
+.terraform/
+
+# Terraform State
+*.tfstate
+*.tfstate.*
+
+# Terraform 실행 계획
+*.tfplan
+
+# 변수 파일에 비밀번호 등이 들어갈 수 있으므로 제외
+*.tfvars
+*.tfvars.json
+
+# 오류 로그
+crash.log
+crash.*.log
+
+# 임시 잠금 파일
+.terraform.tfstate.lock.info
