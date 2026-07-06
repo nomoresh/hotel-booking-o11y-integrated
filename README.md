@@ -154,6 +154,3 @@ npm install
 npm run dev
 ```
 브라우저에서 http://localhost:3000으로 접속하여 회원가입 → 로그인 → 호텔 조회 → 예약까지 확인할 수 있습니다.
-
-4) 모니터링 대시보드 확인
-http://localhost:3001 (Grafana, 계정 admin/admin) 접속 → **MSA Golden Signals** 대시보드에서 3개 서비스의 요청량·에러율·p95 지연시간·JVM 힙 사용량 확인. Prometheus 자체 UI는 http://localhost:9090/targets 에서 스크래핑 상태 확인 가능.
