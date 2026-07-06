@@ -16,14 +16,16 @@ public class Hotel {
     private String id;
 
     private String name;
-    private String location;
+    private String city;
+    private String area;
     private int basePrice;
     private double rating;
 
-    public Hotel(String id, String name, String location, int basePrice, double rating) {
+    public Hotel(String id, String name, String city, String area, int basePrice, double rating) {
         this.id = id;
         this.name = name;
-        this.location = location;
+        this.city = city;
+        this.area = area;
         this.basePrice = basePrice;
         this.rating = rating;
     }

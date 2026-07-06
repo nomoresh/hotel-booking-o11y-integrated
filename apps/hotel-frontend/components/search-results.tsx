@@ -1,11 +1,12 @@
 "use client"
 
 import { useSearchParams } from "next/navigation"
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useState } from "react"
 import { SlidersHorizontal } from "lucide-react"
 import { SearchBar } from "@/components/search-bar"
 import { HotelCard } from "@/components/hotel-card"
-import { HOTELS } from "@/lib/hotels"
+import { getHotel, type Hotel } from "@/lib/hotels"
+import { apiFetch } from "@/lib/api"
 import { track } from "@/lib/telemetry"
 
 type SortKey = "recommended" | "price-asc" | "price-desc" | "rating"
@@ -22,26 +23,48 @@ export function SearchResults() {
   const q = params.get("q")?.trim() ?? ""
   const guests = params.get("guests") ?? "2"
   const [sort, setSort] = useState<SortKey>("recommended")
+  const [results, setResults] = useState<Hotel[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState("")
 
-  const results = useMemo(() => {
-    let list = HOTELS.filter((h) => {
-      if (!q) return true
-      const hay = `${h.name} ${h.nameEn} ${h.city} ${h.area} ${h.tags.join(" ")}`.toLowerCase()
-      return hay.includes(q.toLowerCase())
-    })
-    list = [...list]
-    if (sort === "price-asc") list.sort((a, b) => a.price - b.price)
-    if (sort === "price-desc") list.sort((a, b) => b.price - a.price)
-    if (sort === "rating") list.sort((a, b) => b.rating - a.rating)
-    return list
+  useEffect(() => {
+    let cancelled = false
+
+    const fetchResults = async () => {
+      setIsLoading(true)
+      setError("")
+      try {
+        const query = new URLSearchParams({ sort })
+        if (q) query.set("keyword", q)
+
+        // search-service는 id/city/area/basePrice/rating만 내려주므로,
+        // 이미지·태그 등 화면에 필요한 나머지 정보는 정적 데이터에서 id로 매칭해 채움
+        const matched: { id: string }[] = await apiFetch(`/api/v1/hotels?${query.toString()}`)
+        if (cancelled) return
+        const hotels = matched
+          .map((h) => getHotel(h.id))
+          .filter((h): h is Hotel => Boolean(h))
+        setResults(hotels)
+      } catch (err: any) {
+        if (!cancelled) setError("검색 결과를 불러오는 데 실패했습니다.")
+      } finally {
+        if (!cancelled) setIsLoading(false)
+      }
+    }
+
+    fetchResults()
+    return () => {
+      cancelled = true
+    }
   }, [q, sort])
 
   useEffect(() => {
+    if (isLoading) return
     track({
       name: "search.results_viewed",
       attributes: { query: q || "any", guests, count: results.length, sort },
     })
-  }, [q, guests, results.length, sort])
+  }, [q, guests, results.length, sort, isLoading])
 
   return (
     <>
@@ -85,7 +108,13 @@ export function SearchResults() {
           </div>
         </div>
 
-        {results.length > 0 ? (
+        {isLoading ? (
+          <div className="mt-16 text-center text-sm text-muted-foreground">검색 중...</div>
+        ) : error ? (
+          <div className="mt-16 rounded-2xl border border-dashed border-border py-16 text-center">
+            <p className="font-heading text-lg font-bold text-destructive">{error}</p>
+          </div>
+        ) : results.length > 0 ? (
           <div className="mt-6 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
             {results.map((hotel) => (
               <HotelCard key={hotel.id} hotel={hotel} />
