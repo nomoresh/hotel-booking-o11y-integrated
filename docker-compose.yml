@@ -42,12 +42,38 @@ services:
     ports:
       - "9090:9090"
 
+  loki:
+    image: grafana/loki:3.7.3
+    container_name: hotel-loki
+    restart: unless-stopped
+    volumes:
+      - ./observability/loki/loki-config.yaml:/etc/loki/local-config.yaml:ro
+      - loki_data:/loki
+    ports:
+      - "3100:3100" # 백엔드 서비스가 호스트에서 직접 이 포트로 로그를 push함
+    command: -config.file=/etc/loki/local-config.yaml
+
+  tempo:
+    image: grafana/tempo:3.0.2
+    container_name: hotel-tempo
+    restart: unless-stopped
+    command: -config.file=/etc/tempo/tempo.yaml
+    volumes:
+      - ./observability/tempo/tempo.yaml:/etc/tempo/tempo.yaml:ro
+      - tempo_data:/var/tempo
+    ports:
+      - "3200:3200"   # Tempo 자체 쿼리 API
+      - "4317:4317"   # OTLP gRPC 수신
+      - "4318:4318"   # OTLP HTTP 수신 (백엔드 서비스가 호스트에서 직접 이 포트로 trace를 push함)
+
   grafana:
     image: grafana/grafana:12.3.8
     container_name: hotel-grafana
     restart: unless-stopped
     depends_on:
       - prometheus
+      - loki
+      - tempo
     environment:
       - GF_SECURITY_ADMIN_USER=admin
       - GF_SECURITY_ADMIN_PASSWORD=admin
@@ -61,3 +87,5 @@ services:
 volumes:
   postgres_data:
   grafana_data:
+  loki_data:
+  tempo_data:

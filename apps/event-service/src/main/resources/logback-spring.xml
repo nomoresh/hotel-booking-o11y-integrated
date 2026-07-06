@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+    <include resource="org/springframework/boot/logging/logback/defaults.xml"/>
+    <include resource="org/springframework/boot/logging/logback/console-appender.xml"/>
+
+    <!-- Loki4j 기본 라벨(app=${CONTEXT_NAME})이 이 값을 그대로 사용함 -->
+    <contextName>event-service</contextName>
+
+    <!-- 콘솔 로그는 그대로 두고, 같은 로그를 Loki로도 push (Promtail 없이 직접 전송) -->
+    <appender name="LOKI" class="com.github.loki4j.logback.Loki4jAppender">
+        <http>
+            <url>http://localhost:3100/loki/api/v1/push</url>
+        </http>
+        <!-- Grafana에서 로그 -> 트레이스로 점프하려면 traceId가 로그 본문 텍스트에 보여야 함 -->
+        <message>
+            <pattern>[%thread] %logger{36} - %msg trace_id=%X{traceId:-} span_id=%X{spanId:-}%n</pattern>
+        </message>
+        <batch>
+            <timeoutMs>5000</timeoutMs>
+        </batch>
+    </appender>
+
+    <root level="INFO">
+        <appender-ref ref="CONSOLE"/>
+        <appender-ref ref="LOKI"/>
+    </root>
+</configuration>

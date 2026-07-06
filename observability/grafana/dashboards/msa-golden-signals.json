@@ -81,6 +81,27 @@
           "legendFormat": "{{job}}"
         }
       ]
+    },
+    {
+      "id": 5,
+      "type": "logs",
+      "title": "최근 로그 (user / event / search-service)",
+      "description": "app 라벨로 서비스 구분, level 라벨로 ERROR/WARN만 필터링 가능 ({app=~\"...\", level=\"ERROR\"})",
+      "gridPos": { "h": 10, "w": 24, "x": 0, "y": 16 },
+      "datasource": { "type": "loki", "uid": "loki" },
+      "targets": [
+        {
+          "datasource": { "type": "loki", "uid": "loki" },
+          "expr": "{app=~\"user-service|event-service|search-service\"}",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "showTime": true,
+        "showLabels": true,
+        "wrapLogMessage": true,
+        "sortOrder": "Descending"
+      }
     }
   ]
 }
