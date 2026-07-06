@@ -1,12 +1,50 @@
+"use client"
+
+import { useEffect, useState } from "react"
 import { Sparkles } from "lucide-react"
 import { SiteHeader } from "@/components/site-header"
 import { SiteFooter } from "@/components/site-footer"
 import { EventDealCard } from "@/components/event-deal-card"
 import { FlashCountdown } from "@/components/flash-countdown"
-import { getEventDeals } from "@/lib/hotels"
+import { getEventDeals, type ResolvedDeal } from "@/lib/hotels"
+import { apiFetch } from "@/lib/api"
+
+interface LiveDeal {
+  dealId: string
+  remaining: number
+  soldOut: boolean
+}
 
 export default function EventsPage() {
-  const deals = getEventDeals()
+  const [deals, setDeals] = useState<ResolvedDeal[]>(() => getEventDeals())
+
+  useEffect(() => {
+    let cancelled = false
+
+    // 백엔드(Redis)가 들고 있는 실시간 잔여 수량으로 정적 mock 수치를 덮어씀
+    apiFetch("/api/v1/events")
+      .then((liveDeals: LiveDeal[]) => {
+        if (cancelled) return
+        setDeals((prev) =>
+          prev.map((resolved) => {
+            const live = liveDeals.find((d) => d.dealId === resolved.hotel.id)
+            if (!live) return resolved
+            return {
+              ...resolved,
+              deal: { ...resolved.deal, remaining: live.remaining },
+              soldOut: live.soldOut,
+            }
+          }),
+        )
+      })
+      .catch(() => {
+        // 재고 조회 실패 시 정적 mock 값을 그대로 보여줌 (조용히 폴백)
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   return (
     <div className="flex min-h-screen flex-col">

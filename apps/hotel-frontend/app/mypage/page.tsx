@@ -3,39 +3,67 @@
 import { useEffect, useState } from "react"
 import Image from "next/image"
 import Link from "next/link"
+import { useRouter } from "next/navigation"
 import { User, Calendar, CreditCard, ShoppingBag, CheckCircle2 } from "lucide-react"
 import { SiteHeader } from "@/components/site-header"
 import { SiteFooter } from "@/components/site-footer"
-import { formatKRW } from "@/lib/hotels"
+import { formatKRW, getHotel } from "@/lib/hotels"
 import { apiFetch } from "@/lib/api"
+import { useAuth } from "@/lib/auth"
 
 interface Booking {
   id: string
-  type: "deal" | "regular"
+  hotelId: string
   hotelName: string
   roomType: string
-  image: string
   checkIn: string
   checkOut: string
   nights: number
   guests: number
   totalPrice: number
   status: string
+  eventDeal: boolean
+}
+
+// 프론트에서 미리 버튼 노출 여부를 판단하기 위한 근사치 체크. 실제 허용 여부는 서버가 최종 검증함.
+function isCancellable(booking: Booking) {
+  if (booking.status !== "CONFIRMED" || booking.eventDeal) return false
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  return new Date(booking.checkIn) > today
 }
 
 export default function MyPage() {
+  const router = useRouter()
+  const { user, isLoading: isAuthLoading } = useAuth()
   const [bookings, setBookings] = useState<Booking[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState("")
+  const [cancellingId, setCancellingId] = useState<string | null>(null)
 
-  // 가상 유저 상태 정보
-  const [user] = useState({
-    name: "홍길동",
-    email: "nomoresh@example.com",
-    level: "VIP",
-  })
+  const handleCancel = async (booking: Booking) => {
+    if (!confirm(`"${booking.hotelName}" 예약을 취소하시겠습니까?`)) return
+
+    setCancellingId(booking.id)
+    try {
+      await apiFetch(`/api/v1/bookings/${booking.id}/cancel`, { method: "POST" })
+      setBookings((prev) =>
+        prev.map((b) => (b.id === booking.id ? { ...b, status: "CANCELLED" } : b)),
+      )
+    } catch (err: any) {
+      alert(err.message || "예약 취소에 실패했습니다.")
+    } finally {
+      setCancellingId(null)
+    }
+  }
 
   useEffect(() => {
+    if (isAuthLoading) return
+    if (!user) {
+      router.push("/login")
+      return
+    }
+
     const fetchMyBookings = async () => {
       try {
         // 백엔드 Booking Service의 내 예약 내역 엔드포인트 호출
@@ -50,7 +78,11 @@ export default function MyPage() {
     }
 
     fetchMyBookings()
-  }, [])
+  }, [user, isAuthLoading, router])
+
+  if (isAuthLoading || !user) {
+    return null
+  }
 
   return (
     <div className="flex min-h-screen flex-col">
@@ -66,9 +98,6 @@ export default function MyPage() {
               <div>
                 <div className="flex items-center gap-2">
                   <h2 className="font-heading text-xl font-black text-foreground">{user.name} 님</h2>
-                  <span className="rounded-md bg-primary px-2 py-0.5 text-[10px] font-bold text-primary-foreground uppercase">
-                    {user.level}
-                  </span>
                 </div>
                 <p className="text-sm text-muted-foreground">{user.email}</p>
               </div>
@@ -102,20 +131,15 @@ export default function MyPage() {
               ) : (
                 bookings.map((booking) => (
                   <div key={booking.id} className="group flex flex-col md:flex-row overflow-hidden rounded-2xl border border-border bg-card shadow-sm transition-all hover:shadow-md">
-                    
+
                     {/* 숙소 썸네일 */}
                     <div className="relative aspect-[16/10] w-full md:w-48 shrink-0 overflow-hidden bg-secondary">
                       <Image
-                        src={booking.image || "/placeholder.svg"}
+                        src={getHotel(booking.hotelId)?.image || "/placeholder.svg"}
                         alt={booking.hotelName}
                         fill
                         className="object-cover"
                       />
-                      {booking.type === "deal" && (
-                        <span className="absolute left-2 top-2 rounded-md bg-destructive px-2 py-0.5 text-[10px] font-black text-primary-foreground uppercase animate-pulse">
-                          타임세일
-                        </span>
-                      )}
                     </div>
 
                     {/* 예약 세부 정보 */}
@@ -125,9 +149,15 @@ export default function MyPage() {
                           <span className="text-[11px] font-mono font-bold text-muted-foreground">
                             주문번호 {booking.id}
                           </span>
-                          <span className="inline-flex items-center gap-1 text-xs font-bold text-emerald-600 bg-emerald-50 px-2.5 py-0.5 rounded-full dark:bg-emerald-950/30 dark:text-emerald-400">
-                            <CheckCircle2 className="size-3.5" /> 예약 확정
-                          </span>
+                          {booking.status === "CANCELLED" ? (
+                            <span className="inline-flex items-center gap-1 text-xs font-bold text-muted-foreground bg-secondary px-2.5 py-0.5 rounded-full">
+                              취소됨
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 text-xs font-bold text-emerald-600 bg-emerald-50 px-2.5 py-0.5 rounded-full dark:bg-emerald-950/30 dark:text-emerald-400">
+                              <CheckCircle2 className="size-3.5" /> 예약 확정
+                            </span>
+                          )}
                         </div>
 
                         <h3 className="font-heading text-lg font-bold leading-tight text-foreground group-hover:text-primary transition-colors">
@@ -153,6 +183,17 @@ export default function MyPage() {
                           {formatKRW(booking.totalPrice)}
                         </span>
                       </div>
+
+                      {isCancellable(booking) && (
+                        <button
+                          type="button"
+                          onClick={() => handleCancel(booking)}
+                          disabled={cancellingId === booking.id}
+                          className="mt-3 w-full rounded-xl border border-border py-2 text-xs font-semibold text-muted-foreground transition-colors hover:bg-secondary hover:text-destructive disabled:opacity-60"
+                        >
+                          {cancellingId === booking.id ? "취소 처리 중..." : "예약 취소"}
+                        </button>
+                      )}
                     </div>
 
                   </div>

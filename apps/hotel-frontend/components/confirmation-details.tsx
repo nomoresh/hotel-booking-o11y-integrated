@@ -17,10 +17,11 @@ export function ConfirmationDetails() {
   const nights = params.get("nights") ?? "1"
   const total = Number(params.get("total") ?? "0")
 
-  const bookingId = useMemo(
+  const fallbackBookingId = useMemo(
     () => "STAY-" + Math.random().toString(36).slice(2, 8).toUpperCase(),
     [],
   )
+  const bookingId = params.get("bookingId") ?? fallbackBookingId
 
   useEffect(() => {
     if (hotel) {

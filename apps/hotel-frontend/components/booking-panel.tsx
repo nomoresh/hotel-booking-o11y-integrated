@@ -5,6 +5,8 @@ import { useMemo, useState } from "react"
 import { CalendarDays, Users, ShieldCheck, Flame } from "lucide-react"
 import { type Hotel, formatKRW } from "@/lib/hotels"
 import { track } from "@/lib/telemetry"
+import { apiFetch } from "@/lib/api"
+import { useAuth } from "@/lib/auth"
 
 function todayISO(offset = 0) {
   const d = new Date()
@@ -33,11 +35,14 @@ export function BookingPanel({
   eventNights = 1,
 }: BookingPanelProps) {
   const router = useRouter()
-  
+  const { user } = useAuth()
+
   // isEvent 상태에 따라 초기값을 분기합니다.
   const [checkIn, setCheckIn] = useState(isEvent ? eventCheckIn : todayISO(3))
   const [checkOut, setCheckOut] = useState(isEvent ? eventCheckOut : todayISO(5))
   const [guests, setGuests] = useState(isEvent ? eventGuests : 2)
+  const [isReserving, setIsReserving] = useState(false)
+  const [reserveError, setReserveError] = useState("")
 
   // 1. 숙박 일수 계산
   const nights = useMemo(() => {
@@ -61,7 +66,7 @@ export function BookingPanel({
   const serviceFee = isEvent ? 0 : Math.round(roomTotal * 0.1) // 특가는 수수료가 포함된 최종 가격으로 가정
   const total = roomTotal + serviceFee
 
-  function reserve() {
+  async function reserve() {
     track({
       name: isEvent ? "event.purchase_clicked" : "booking.reserve_clicked",
       attributes: {
@@ -71,15 +76,50 @@ export function BookingPanel({
         total,
       },
     })
-    const params = new URLSearchParams({
-      hotel: hotel.id,
-      in: isEvent ? eventCheckIn : checkIn,
-      out: isEvent ? eventCheckOut : checkOut,
-      guests: String(isEvent ? eventGuests : guests),
-      nights: String(nights),
-      total: String(total),
-    })
-    router.push(`/booking/confirmation?${params.toString()}`)
+
+    if (!user) {
+      router.push("/login")
+      return
+    }
+
+    const finalCheckIn = isEvent ? eventCheckIn : checkIn
+    const finalCheckOut = isEvent ? eventCheckOut : checkOut
+    const finalGuests = isEvent ? eventGuests : guests
+    const roomType = isEvent ? (hotel.tags[0] ?? "특가 객실") : "스탠다드 (기본)"
+
+    setReserveError("")
+    setIsReserving(true)
+    try {
+      const booking = await apiFetch("/api/v1/bookings", {
+        method: "POST",
+        body: JSON.stringify({
+          hotelId: hotel.id,
+          hotelName: hotel.name,
+          roomType,
+          checkIn: finalCheckIn,
+          checkOut: finalCheckOut,
+          nights,
+          guests: finalGuests,
+          totalPrice: total,
+          eventDeal: isEvent,
+        }),
+      })
+
+      const params = new URLSearchParams({
+        hotel: hotel.id,
+        in: finalCheckIn,
+        out: finalCheckOut,
+        guests: String(finalGuests),
+        nights: String(nights),
+        total: String(total),
+        bookingId: booking.id,
+      })
+      router.push(`/booking/confirmation?${params.toString()}`)
+    } catch (err: any) {
+      setReserveError(err.message || "예약에 실패했습니다.")
+    } finally {
+      setIsReserving(false)
+    }
   }
 
   return (
@@ -154,10 +194,14 @@ export function BookingPanel({
       <button
         type="button"
         onClick={reserve}
-        className={`mt-4 w-full rounded-xl py-3.5 font-semibold text-primary-foreground transition-opacity hover:opacity-90 ${isEvent ? "bg-destructive text-white" : "bg-primary"}`}
+        disabled={isReserving}
+        className={`mt-4 w-full rounded-xl py-3.5 font-semibold text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-60 ${isEvent ? "bg-destructive text-white" : "bg-primary"}`}
       >
-        {isEvent ? "선착순 특가 결제하기" : "예약하기"}
+        {isReserving ? "처리 중..." : isEvent ? "선착순 특가 결제하기" : "예약하기"}
       </button>
+      {reserveError && (
+        <p className="mt-2 text-center text-xs font-medium text-destructive">{reserveError}</p>
+      )}
       <p className="mt-2 text-center text-xs text-muted-foreground">
         {isEvent ? "선착순 한정 상품으로 빠른 결제가 필요합니다" : "지금 예약해도 요금이 청구되지 않아요"}
       </p>
