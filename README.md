@@ -57,10 +57,14 @@
 - **`event-service`:** 예약 생성/조회/취소 및 특가 선착순 재고 관리. Redis 원자 연산(Lua 스크립트)으로 재고 초과 판매 방지, 인당 구매 개수 제한. 예약 생성 시 search-service를 호출해 결제 금액을 서버가 직접 재계산·검증(클라이언트 조작 방지, search-service 장애 시 503). 예약 취소는 일반 예약만 체크인 하루 전까지 가능하며 특가 상품은 취소 불가. *(포트 8084)*
 - **`notice-service`:** 예약 완료 후 비동기로 알림 전송 (분산 추적 컨텍스트 전파 검증용). *(계획 단계, 메시지 큐 선정부터 필요 — 아직 미착수)*
 
-### 📊 [2] Observability 통합 흐름 (O11y Pipeline) — 목표 아키텍처, 아직 미구현
+### 📊 [2] Observability 통합 흐름 (O11y Pipeline)
 [ App Pods ] ──(Metrics)──────> [ Prometheus ] ──────> [ Grafana Mimir ] ──┐
 ──(Structured Log)─> [ Promtail ] ────────> [ Grafana Loki ]  ──┼─> [ Grafana UI ]
 ──(Traces Context)─> [ Otel Collector ] ──> [ Grafana Tempo ] ──┘
+
+> **메트릭(1/3축) 완료.** 3개 서비스 모두 Micrometer + `micrometer-registry-prometheus`로 `/actuator/prometheus`를 노출하고,
+> 로컬 Prometheus가 15초 주기로 스크래핑, Grafana가 자동 프로비저닝된 대시보드(`observability/grafana/dashboards/msa-golden-signals.json`)로
+> 요청 처리량 · 에러율 · p95 지연시간 · JVM 힙 사용량을 보여줌. 로그(Loki)·트레이싱(Tempo)은 아직 미착수 — 5. 구현 현황 참고.
 
 ---
 
@@ -80,17 +84,18 @@
 | **예약** | 선착순 재고 관리 (Redis 원자 연산, 오버셀 방지, 인당 구매 제한) | ✅ 완료 |
 | **예약** | 예약 취소 (일반 예약만, 체크인 하루 전까지) + 마이페이지 취소 버튼 연동 | ✅ 완료 |
 | **예약** | 결제 금액 서버 측 검증 (search-service 실호출로 재계산) | ✅ 완료 |
-| **인프라** | 로컬 Docker Compose (Postgres + Redis) | ✅ 완료 |
+| **인프라** | 로컬 Docker Compose (Postgres + Redis + Prometheus + Grafana) | ✅ 완료 |
 | **인프라** | K8s 매니페스트 / Helm / ArgoCD GitOps | ⬜ 미착수 |
 | **인프라** | CI/CD (GitHub Actions) | ⬜ 미착수 |
-| **Observability** | 메트릭 (Prometheus) | ⬜ 미착수 |
+| **Observability** | 메트릭 (Micrometer + Prometheus, 3개 서비스 전체) | ✅ 완료 |
+| **Observability** | Grafana 대시보드 (요청량·에러율·p95·JVM 힙, 자동 프로비저닝) | ✅ 완료 |
 | **Observability** | 로그 (Loki) | ⬜ 미착수 |
 | **Observability** | 분산 추적 (OpenTelemetry + Tempo) | ⬜ 미착수 |
-| **Observability** | Grafana 대시보드 / Alertmanager 런북 | ⬜ 미착수 |
+| **Observability** | Alertmanager 런북 | ⬜ 미착수 |
 | **알림** | notice-service (비동기 알림, 트레이스 전파 검증) | ⬜ 미착수 — 메시지 큐 선정부터 필요 |
 | **부하 테스트** | K6 시나리오 | ⬜ 미착수 |
 
-> 로컬에서 회원가입 → 로그인 → 호텔 검색(키워드/정렬) → 특가 예약(재고 차감 포함) → 마이페이지까지 전 구간을 브라우저에서 실제로 실행/검증했습니다. 다음 단계는 Observability 스택(메트릭·트레이싱)입니다.
+> 로컬에서 회원가입 → 로그인 → 호텔 검색(키워드/정렬) → 특가 예약(재고 차감 포함) → 마이페이지까지 전 구간을 브라우저에서 실제로 실행/검증했고, 3개 서비스의 메트릭이 Grafana 대시보드로 실시간 확인됩니다. 다음 단계는 로그(Loki)·분산 추적(Tempo)입니다.
 
 ---
 
@@ -103,13 +108,18 @@ hotel-booking-o11y-integrated/
 │   ├── user-service/             # 회원가입/로그인/로그아웃 (포트 8083)
 │   ├── event-service/            # 예약 생성/조회, 선착순 재고 관리 (포트 8084)
 │   └── search-service/           # 호텔 조회 서비스 (포트 8085)
-└── docker-compose.yml            # 로컬 개발용 Postgres + Redis
+├── observability/                # 관찰성 인프라 설정 (메트릭만 구현, 로그·트레이싱은 예정)
+│   ├── prometheus/prometheus.yml         # 3개 서비스 스크래핑 설정
+│   └── grafana/
+│       ├── provisioning/                 # 데이터소스·대시보드 자동 등록
+│       └── dashboards/msa-golden-signals.json
+└── docker-compose.yml            # 로컬 개발용 Postgres + Redis + Prometheus + Grafana
 
 ```
 
-> `infra/`(K8s·Helm), `observability/`(Grafana·Alertmanager), `load-test/`(K6), `notice-service/`는 아직 만들어지지 않았습니다. 위 구조는 실제 리포지토리 상태이며, 목표 구조는 이후 각 항목이 구현되는 시점에 다시 추가될 예정입니다.
+> `infra/`(K8s·Helm), `load-test/`(K6), `notice-service/`는 아직 만들어지지 않았습니다. `observability/`는 메트릭 부분만 구현되어 있고 로그(Loki)·트레이싱(Tempo) 설정은 이후 추가될 예정입니다.
 
-## 📊 7. 핵심 모니터링 및 알림 설계 (SLO & Alerts) — 목표치, 계측 전
+## 📊 7. 핵심 모니터링 및 알림 설계 (SLO & Alerts)
 ```text
         지표 (SLI)    |     목표 (SLO)   |                측정 방식 / 임계치
 가용성 (Availability)       99.5%               최근 30일간 HTTP 5XX 에러 비율 전체 요청의 0.5% 미만 유지
@@ -117,15 +127,15 @@ hotel-booking-o11y-integrated/
 에러율 (Error Rate)         < 1.0%             Peak Time 시 시스템 예외(Exception) 발생 빈도 1% 미만 제어
 
 ```
-> 위 SLI/SLO는 Observability 스택(Prometheus/Grafana) 도입 후 실측치로 검증할 목표값이며, 현재는 계측 이전 단계입니다.
+> Grafana 대시보드(요청량·에러율·p95)로 위 지표를 실시간으로 볼 수 있게 됐지만, 임계치를 넘었을 때 자동으로 알리는 Alertmanager 규칙은 아직 없습니다 (수동 확인만 가능).
 
 ## 💻 8. 시작 가이드 (Quick Start)
 Prerequisites
 - Node.js v20+ 및 npm
 - Java 21, Gradle
-- Docker Desktop (Postgres·Redis 컨테이너 실행용)
+- Docker Desktop (Postgres·Redis·Prometheus·Grafana 컨테이너 실행용)
 
-1) DB 기동 (Postgres 5433, Redis 6379)
+1) 인프라 기동 (Postgres 5433, Redis 6379, Prometheus 9090, Grafana 3001)
 ```bash
 docker compose up -d
 ```
