@@ -101,6 +101,7 @@ export function BookingPanel({
           nights,
           guests: finalGuests,
           totalPrice: total,
+          eventDeal: isEvent,
         }),
       })
 
