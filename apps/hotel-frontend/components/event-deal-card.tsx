@@ -46,6 +46,7 @@ export function EventDealCard({ deal }: { deal: ResolvedDeal }) {
           nights: deal.deal.nights,
           guests: deal.deal.guests,
           totalPrice: hotel.price,
+          eventDeal: true,
         }),
       })
       router.push(

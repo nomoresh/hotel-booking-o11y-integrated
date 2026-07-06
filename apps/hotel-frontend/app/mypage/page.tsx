@@ -22,6 +22,15 @@ interface Booking {
   guests: number
   totalPrice: number
   status: string
+  eventDeal: boolean
+}
+
+// 프론트에서 미리 버튼 노출 여부를 판단하기 위한 근사치 체크. 실제 허용 여부는 서버가 최종 검증함.
+function isCancellable(booking: Booking) {
+  if (booking.status !== "CONFIRMED" || booking.eventDeal) return false
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  return new Date(booking.checkIn) > today
 }
 
 export default function MyPage() {
@@ -30,6 +39,23 @@ export default function MyPage() {
   const [bookings, setBookings] = useState<Booking[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState("")
+  const [cancellingId, setCancellingId] = useState<string | null>(null)
+
+  const handleCancel = async (booking: Booking) => {
+    if (!confirm(`"${booking.hotelName}" 예약을 취소하시겠습니까?`)) return
+
+    setCancellingId(booking.id)
+    try {
+      await apiFetch(`/api/v1/bookings/${booking.id}/cancel`, { method: "POST" })
+      setBookings((prev) =>
+        prev.map((b) => (b.id === booking.id ? { ...b, status: "CANCELLED" } : b)),
+      )
+    } catch (err: any) {
+      alert(err.message || "예약 취소에 실패했습니다.")
+    } finally {
+      setCancellingId(null)
+    }
+  }
 
   useEffect(() => {
     if (isAuthLoading) return
@@ -123,9 +149,15 @@ export default function MyPage() {
                           <span className="text-[11px] font-mono font-bold text-muted-foreground">
                             주문번호 {booking.id}
                           </span>
-                          <span className="inline-flex items-center gap-1 text-xs font-bold text-emerald-600 bg-emerald-50 px-2.5 py-0.5 rounded-full dark:bg-emerald-950/30 dark:text-emerald-400">
-                            <CheckCircle2 className="size-3.5" /> 예약 확정
-                          </span>
+                          {booking.status === "CANCELLED" ? (
+                            <span className="inline-flex items-center gap-1 text-xs font-bold text-muted-foreground bg-secondary px-2.5 py-0.5 rounded-full">
+                              취소됨
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 text-xs font-bold text-emerald-600 bg-emerald-50 px-2.5 py-0.5 rounded-full dark:bg-emerald-950/30 dark:text-emerald-400">
+                              <CheckCircle2 className="size-3.5" /> 예약 확정
+                            </span>
+                          )}
                         </div>
 
                         <h3 className="font-heading text-lg font-bold leading-tight text-foreground group-hover:text-primary transition-colors">
@@ -151,6 +183,17 @@ export default function MyPage() {
                           {formatKRW(booking.totalPrice)}
                         </span>
                       </div>
+
+                      {isCancellable(booking) && (
+                        <button
+                          type="button"
+                          onClick={() => handleCancel(booking)}
+                          disabled={cancellingId === booking.id}
+                          className="mt-3 w-full rounded-xl border border-border py-2 text-xs font-semibold text-muted-foreground transition-colors hover:bg-secondary hover:text-destructive disabled:opacity-60"
+                        >
+                          {cancellingId === booking.id ? "취소 처리 중..." : "예약 취소"}
+                        </button>
+                      )}
                     </div>
 
                   </div>
