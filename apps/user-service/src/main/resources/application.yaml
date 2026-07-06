@@ -17,3 +17,13 @@ jwt:
   # HS256 알고리즘 특성상 비밀키는 반드시 32바이트(256비트) 이상의 문자열이어야 에러가 안 납니다
   secret: secret-key-for-hotel-booking-service-o11y-integration-2026-must-be-long-enough
   expiration: 43200000 # 토큰 만료 시간 (12시간)
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  metrics:
+    distribution:
+      percentiles-histogram:
+        http.server.requests: true
