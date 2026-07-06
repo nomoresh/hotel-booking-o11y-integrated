@@ -3,52 +3,71 @@ package com.hotel.user_service.controller;
 import com.hotel.user_service.controller.dto.LoginRequest;
 import com.hotel.user_service.controller.dto.SignUpRequest;
 import com.hotel.user_service.controller.dto.UserResponse;
+import com.hotel.user_service.domain.User;
+import com.hotel.user_service.repository.UserRepository;
 import com.hotel.user_service.security.JwtTokenProvider;
 import com.hotel.user_service.util.CookieUtils;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseCookie;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.Map;
+
 @Slf4j
+@CrossOrigin(origins = "http://localhost:3000", allowedHeaders = "*", allowCredentials = "true")
 @RestController
 @RequestMapping("/api/v1/users")
 @RequiredArgsConstructor
 public class UserController {
 
+    // 아직 등급 체계가 없어 모든 신규 가입자에게 고정으로 부여하는 기본 역할.
+    private static final String DEFAULT_ROLE = "USER";
+
+    private final UserRepository userRepository;
+    private final PasswordEncoder passwordEncoder;
     private final JwtTokenProvider jwtTokenProvider;
     private final CookieUtils cookieUtils;
 
     @PostMapping("/signup")
-    public ResponseEntity<Void> signUp(@RequestBody SignUpRequest request) {
-        // TODO: userService.signUp(request) 비즈니스 로직 연동 (비밀번호 BCrypt 암호화 필수)
-        log.info("[SignUp Success] Email: {}", request.email());
-        return ResponseEntity.status(HttpStatus.CREATED).build();
+    public ResponseEntity<?> signUp(@Valid @RequestBody SignUpRequest request) {
+        if (userRepository.findByEmail(request.email()).isPresent()) {
+            return ResponseEntity.status(HttpStatus.CONFLICT)
+                    .body(Map.of("message", "이미 가입된 이메일입니다."));
+        }
+
+        User user = new User(request.email(), passwordEncoder.encode(request.password()), request.name());
+        User saved = userRepository.save(user);
+
+        log.info("[SignUp Success] Email: {}", saved.getEmail());
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(new UserResponse(saved.getId(), saved.getName(), saved.getEmail()));
     }
 
     @PostMapping("/login")
-    public ResponseEntity<UserResponse> login(@RequestBody LoginRequest request) {
-        // TODO: userService.validateUser(request.email(), request.password()) 검증 로직 영역
-        
-        // 가상의 인증 통과 및 등급 부여 설정
-        String userEmail = request.email();
-        String userRole = "VIP"; 
-        String userName = "홍길동";
+    public ResponseEntity<?> login(@Valid @RequestBody LoginRequest request) {
+        User user = userRepository.findByEmail(request.email())
+                .filter(u -> passwordEncoder.matches(request.password(), u.getPassword()))
+                .orElse(null);
 
-        // 1. 검증 완료 후 유저 정보 기반 JWT 토큰 생성
-        String accessToken = jwtTokenProvider.createToken(userEmail, userRole);
+        if (user == null) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(Map.of("message", "이메일 또는 비밀번호가 올바르지 않습니다."));
+        }
 
-        // 2. JWT 토큰을 품은 HttpOnly ResponseCookie 오브젝트 빌드
+        // 검증 완료 후 유저 정보 기반 JWT 토큰 생성, HttpOnly 쿠키로 전달
+        String accessToken = jwtTokenProvider.createToken(user.getEmail(), DEFAULT_ROLE);
         ResponseCookie cookie = cookieUtils.createAccessTokenCookie(accessToken);
 
-        log.info("[Login Success] Email: {} | Role: {}", userEmail, userRole);
+        log.info("[Login Success] Email: {}", user.getEmail());
 
-        // 3. 응답 헤더에 Set-Cookie 세팅 후 Body와 함께 전송
         return ResponseEntity.ok()
                 .header(HttpHeaders.SET_COOKIE, cookie.toString())
-                .body(new UserResponse(userName, userEmail, userRole));
+                .body(new UserResponse(user.getId(), user.getName(), user.getEmail()));
     }
 }
