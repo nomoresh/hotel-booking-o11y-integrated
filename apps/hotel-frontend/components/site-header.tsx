@@ -1,9 +1,26 @@
+"use client"
+
 import Link from "next/link"
+import { useRouter } from "next/navigation"
 import { Activity, Globe } from "lucide-react"
-import { User, Flame } from "lucide-react"
+import { User, Flame, LogOut } from "lucide-react"
+import { apiFetch } from "@/lib/api"
+import { clearStoredUser, useAuth } from "@/lib/auth"
 
 export function SiteHeader() {
-  const isLoggedIn = false
+  const router = useRouter()
+  const { user } = useAuth()
+  const isLoggedIn = Boolean(user)
+
+  const handleLogout = async () => {
+    try {
+      await apiFetch("/api/v1/users/logout", { method: "POST" })
+    } finally {
+      clearStoredUser()
+      router.push("/")
+    }
+  }
+
   return (
     <header className="sticky top-0 z-40 border-b border-border/70 bg-background/80 backdrop-blur-md">
       <div className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-4 px-4">
@@ -39,12 +56,21 @@ export function SiteHeader() {
           >
             <User className="size-5" /> 
           </Link>
-          <Link
-            href="/login" 
-            className="rounded-full bg-foreground px-4 py-2 text-sm font-semibold text-background transition-opacity hover:opacity-90"
-          >
-            로그인
-          </Link>
+          {isLoggedIn ? (
+            <button
+              onClick={handleLogout}
+              className="flex items-center gap-1.5 rounded-full bg-foreground px-4 py-2 text-sm font-semibold text-background transition-opacity hover:opacity-90"
+            >
+              <LogOut className="size-3.5" /> {user!.name}님 로그아웃
+            </button>
+          ) : (
+            <Link
+              href="/login"
+              className="rounded-full bg-foreground px-4 py-2 text-sm font-semibold text-background transition-opacity hover:opacity-90"
+            >
+              로그인
+            </Link>
+          )}
         </div>
       </div>
     </header>

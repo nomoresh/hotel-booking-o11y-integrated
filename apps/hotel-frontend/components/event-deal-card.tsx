@@ -7,12 +7,15 @@ import Image from "next/image"
 import { CalendarDays, Flame, MapPin, Users } from "lucide-react"
 import { type ResolvedDeal, formatKRW } from "@/lib/hotels"
 import { WaitingRoom } from "@/components/waiting-room"
+import { apiFetch } from "@/lib/api"
+import { useAuth } from "@/lib/auth"
 
 export function EventDealCard({ deal }: { deal: ResolvedDeal }) {
   const router = useRouter()
   const { hotel, checkIn, checkOut } = deal
+  const { user } = useAuth()
   const [isWaiting, setIsWaiting] = useState(false)
-  
+
   const discount = hotel.originalPrice
     ? Math.round((1 - hotel.price / hotel.originalPrice) * 100)
     : 0
@@ -20,16 +23,37 @@ export function EventDealCard({ deal }: { deal: ResolvedDeal }) {
   const low = deal.deal.remaining <= 3 && !deal.soldOut
 
   const handleImmediatePurchase = (e: React.MouseEvent) => {
-    e.preventDefault() 
+    e.preventDefault()
     e.stopPropagation()
+    if (!user) {
+      router.push("/login")
+      return
+    }
     setIsWaiting(true)
   }
 
-  const handleWaitingSuccess = () => {
+  const handleWaitingSuccess = async () => {
     setIsWaiting(false)
-    router.push(
-      `/booking/confirmation?hotel=${hotel.id}&in=${checkIn}&out=${checkOut}&guests=${deal.deal.guests}&nights=${deal.deal.nights}&total=${hotel.price}`
-    )
+    try {
+      const booking = await apiFetch("/api/v1/bookings", {
+        method: "POST",
+        body: JSON.stringify({
+          hotelId: hotel.id,
+          hotelName: hotel.name,
+          roomType: deal.deal.roomType,
+          checkIn,
+          checkOut,
+          nights: deal.deal.nights,
+          guests: deal.deal.guests,
+          totalPrice: hotel.price,
+        }),
+      })
+      router.push(
+        `/booking/confirmation?hotel=${hotel.id}&in=${checkIn}&out=${checkOut}&guests=${deal.deal.guests}&nights=${deal.deal.nights}&total=${hotel.price}&bookingId=${booking.id}`
+      )
+    } catch (err: any) {
+      alert(err.message || "예약에 실패했습니다.")
+    }
   }
 
   return (

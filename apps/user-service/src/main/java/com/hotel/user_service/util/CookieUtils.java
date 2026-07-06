@@ -16,4 +16,15 @@ public class CookieUtils {
                 .sameSite("Lax")               // 크로스 도메인 간 CSRF 방어와 인증 유연성 밸런스
                 .build();
     }
+
+    // 로그아웃 시 동일한 이름의 쿠키를 즉시 만료시키기 위한 메서드
+    public ResponseCookie expireAccessTokenCookie() {
+        return ResponseCookie.from("access_token", "")
+                .httpOnly(true)
+                .secure(true)
+                .path("/")
+                .maxAge(0)
+                .sameSite("Lax")
+                .build();
+    }
 }

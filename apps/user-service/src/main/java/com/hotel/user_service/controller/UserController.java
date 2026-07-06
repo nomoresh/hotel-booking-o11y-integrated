@@ -70,4 +70,23 @@ public class UserController {
                 .header(HttpHeaders.SET_COOKIE, cookie.toString())
                 .body(new UserResponse(user.getId(), user.getName(), user.getEmail()));
     }
+
+    @GetMapping("/me")
+    public ResponseEntity<?> me(@CookieValue(value = "access_token", required = false) String token) {
+        if (token == null || !jwtTokenProvider.isValid(token)) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        }
+
+        return userRepository.findByEmail(jwtTokenProvider.getEmail(token))
+                .map(user -> ResponseEntity.ok(new UserResponse(user.getId(), user.getName(), user.getEmail())))
+                .orElseGet(() -> ResponseEntity.status(HttpStatus.UNAUTHORIZED).build());
+    }
+
+    @PostMapping("/logout")
+    public ResponseEntity<Void> logout() {
+        ResponseCookie cookie = cookieUtils.expireAccessTokenCookie();
+        return ResponseEntity.ok()
+                .header(HttpHeaders.SET_COOKIE, cookie.toString())
+                .build();
+    }
 }
