@@ -7,7 +7,6 @@
 ## 🚀 1. 프로젝트 개요 (Introduction)
 본 프로젝트는 호텔 예약 서비스에서 **"특가 이벤트"** 시 발생하는 순간적인 대규모 트래픽(Momental Traffic) 상황을 가정합니다. 클라우드 네이티브 환경에서 이러한 급격한 부하와 인프라 장애 발생 시, 시스템의 신뢰성을 보장하기 위해 **메트릭(Metric), 로그(Log), 추적(Trace)**의 3축 데이터를 단일 화면에서 유기적으로 상관 분석할 수 있는 통합 Observability 아키텍처를 구현합니다.
 
-> 📌 현재는 MSA 기반 예약 플로우(회원가입/로그인, 호텔 조회, 선착순 특가 예약)까지 로컬 환경에서 동작을 완료한 단계이며, Observability 스택과 인프라 자동화는 다음 단계로 진행 중입니다. 자세한 현황은 [5. 구현 현황]을 참고하세요.
 
 ### ✨ 핵심 차별화 포인트
 - **통합 관찰성 (Unified O11y):** Grafana를 중심으로 메트릭 조회 중 특정 에러 로그를 확인하고, 해당 로그의 `traceId`를 통해 분산 추적(Tempo)으로 즉시 점프하는 단일 화면 분석 체계 구축.
@@ -62,9 +61,11 @@
 ──(Structured Log)─> [ Promtail ] ────────> [ Grafana Loki ]  ──┼─> [ Grafana UI ]
 ──(Traces Context)─> [ Otel Collector ] ──> [ Grafana Tempo ] ──┘
 
-> **메트릭(1/3축) 완료.** 3개 서비스 모두 Micrometer + `micrometer-registry-prometheus`로 `/actuator/prometheus`를 노출하고,
-> 로컬 Prometheus가 15초 주기로 스크래핑, Grafana가 자동 프로비저닝된 대시보드(`observability/grafana/dashboards/msa-golden-signals.json`)로
-> 요청 처리량 · 에러율 · p95 지연시간 · JVM 힙 사용량을 보여줌. 로그(Loki)·트레이싱(Tempo)은 아직 미착수 — 5. 구현 현황 참고.
+> **메트릭·로그(2/3축) 완료.** 3개 서비스 모두 Micrometer + `micrometer-registry-prometheus`로 `/actuator/prometheus`를 노출하고,
+> 로컬 Prometheus가 15초 주기로 스크래핑. 로그는 Promtail 없이 Logback(`loki-logback-appender`)이 Loki로 직접 push (서비스가
+> 컨테이너가 아니라 호스트에서 떠 있어 파일 tail 방식보다 이 방식이 단순함). Grafana가 자동 프로비저닝된 대시보드
+> (`observability/grafana/dashboards/msa-golden-signals.json`)로 요청 처리량 · 에러율 · p95 지연시간 · JVM 힙 사용량 · 최근 로그를
+> 한 화면에서 보여줌. 트레이싱(Tempo)은 아직 미착수 — 5. 구현 현황 참고.
 
 ---
 
@@ -84,18 +85,18 @@
 | **예약** | 선착순 재고 관리 (Redis 원자 연산, 오버셀 방지, 인당 구매 제한) | ✅ 완료 |
 | **예약** | 예약 취소 (일반 예약만, 체크인 하루 전까지) + 마이페이지 취소 버튼 연동 | ✅ 완료 |
 | **예약** | 결제 금액 서버 측 검증 (search-service 실호출로 재계산) | ✅ 완료 |
-| **인프라** | 로컬 Docker Compose (Postgres + Redis + Prometheus + Grafana) | ✅ 완료 |
+| **인프라** | 로컬 Docker Compose (Postgres + Redis + Prometheus + Grafana + Loki) | ✅ 완료 |
 | **인프라** | K8s 매니페스트 / Helm / ArgoCD GitOps | ⬜ 미착수 |
 | **인프라** | CI/CD (GitHub Actions) | ⬜ 미착수 |
 | **Observability** | 메트릭 (Micrometer + Prometheus, 3개 서비스 전체) | ✅ 완료 |
-| **Observability** | Grafana 대시보드 (요청량·에러율·p95·JVM 힙, 자동 프로비저닝) | ✅ 완료 |
-| **Observability** | 로그 (Loki) | ⬜ 미착수 |
+| **Observability** | Grafana 대시보드 (요청량·에러율·p95·JVM 힙·로그, 자동 프로비저닝) | ✅ 완료 |
+| **Observability** | 로그 (Loki, Logback → 직접 push) | ✅ 완료 |
 | **Observability** | 분산 추적 (OpenTelemetry + Tempo) | ⬜ 미착수 |
 | **Observability** | Alertmanager 런북 | ⬜ 미착수 |
 | **알림** | notice-service (비동기 알림, 트레이스 전파 검증) | ⬜ 미착수 — 메시지 큐 선정부터 필요 |
 | **부하 테스트** | K6 시나리오 | ⬜ 미착수 |
 
-> 로컬에서 회원가입 → 로그인 → 호텔 검색(키워드/정렬) → 특가 예약(재고 차감 포함) → 마이페이지까지 전 구간을 브라우저에서 실제로 실행/검증했고, 3개 서비스의 메트릭이 Grafana 대시보드로 실시간 확인됩니다. 다음 단계는 로그(Loki)·분산 추적(Tempo)입니다.
+> 로컬에서 회원가입 → 로그인 → 호텔 검색(키워드/정렬) → 특가 예약(재고 차감 포함) → 마이페이지까지 전 구간을 브라우저에서 실제로 실행/검증했고, 3개 서비스의 메트릭·로그가 Grafana 대시보드 한 화면에서 실시간 확인됩니다. 다음 단계는 분산 추적(Tempo)입니다.
 
 ---
 
@@ -108,16 +109,17 @@ hotel-booking-o11y-integrated/
 │   ├── user-service/             # 회원가입/로그인/로그아웃 (포트 8083)
 │   ├── event-service/            # 예약 생성/조회, 선착순 재고 관리 (포트 8084)
 │   └── search-service/           # 호텔 조회 서비스 (포트 8085)
-├── observability/                # 관찰성 인프라 설정 (메트릭만 구현, 로그·트레이싱은 예정)
+├── observability/                # 관찰성 인프라 설정 (메트릭·로그 구현, 트레이싱은 예정)
 │   ├── prometheus/prometheus.yml         # 3개 서비스 스크래핑 설정
+│   ├── loki/loki-config.yaml              # 로그 저장소 설정 (filesystem, 단일 프로세스)
 │   └── grafana/
-│       ├── provisioning/                 # 데이터소스·대시보드 자동 등록
+│       ├── provisioning/                 # 데이터소스(Prometheus·Loki)·대시보드 자동 등록
 │       └── dashboards/msa-golden-signals.json
-└── docker-compose.yml            # 로컬 개발용 Postgres + Redis + Prometheus + Grafana
+└── docker-compose.yml            # 로컬 개발용 Postgres + Redis + Prometheus + Grafana + Loki
 
 ```
 
-> `infra/`(K8s·Helm), `load-test/`(K6), `notice-service/`는 아직 만들어지지 않았습니다. `observability/`는 메트릭 부분만 구현되어 있고 로그(Loki)·트레이싱(Tempo) 설정은 이후 추가될 예정입니다.
+> `infra/`(K8s·Helm), `load-test/`(K6), `notice-service/`는 아직 만들어지지 않았습니다. `observability/`는 메트릭·로그까지 구현되어 있고 트레이싱(Tempo) 설정은 이후 추가될 예정입니다.
 
 ## 📊 7. 핵심 모니터링 및 알림 설계 (SLO & Alerts)
 ```text
@@ -133,9 +135,9 @@ hotel-booking-o11y-integrated/
 Prerequisites
 - Node.js v20+ 및 npm
 - Java 21, Gradle
-- Docker Desktop (Postgres·Redis·Prometheus·Grafana 컨테이너 실행용)
+- Docker Desktop (Postgres·Redis·Prometheus·Grafana·Loki 컨테이너 실행용)
 
-1) 인프라 기동 (Postgres 5433, Redis 6379, Prometheus 9090, Grafana 3001)
+1) 인프라 기동 (Postgres 5433, Redis 6379, Prometheus 9090, Loki 3100, Grafana 3001)
 ```bash
 docker compose up -d
 ```
@@ -156,4 +158,4 @@ npm run dev
 브라우저에서 http://localhost:3000으로 접속하여 회원가입 → 로그인 → 호텔 조회 → 예약까지 확인할 수 있습니다.
 
 4) 모니터링 대시보드 확인
-http://localhost:3001 (Grafana, 계정 admin/admin) 접속 → **MSA Golden Signals** 대시보드에서 3개 서비스의 요청량·에러율·p95 지연시간·JVM 힙 사용량 확인. Prometheus 자체 UI는 http://localhost:9090/targets 에서 스크래핑 상태 확인 가능.
+http://localhost:3001 (Grafana, 계정 admin/admin) 접속 → **MSA Golden Signals** 대시보드에서 3개 서비스의 요청량·에러율·p95 지연시간·JVM 힙 사용량과 최근 로그를 한 화면에서 확인. Prometheus 자체 UI는 http://localhost:9090/targets, Loki는 Grafana Explore 탭에서 `{app="event-service"}` 같은 LogQL로 직접 조회 가능.

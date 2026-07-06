@@ -42,12 +42,24 @@ services:
     ports:
       - "9090:9090"
 
+  loki:
+    image: grafana/loki:3.7.3
+    container_name: hotel-loki
+    restart: unless-stopped
+    volumes:
+      - ./observability/loki/loki-config.yaml:/etc/loki/local-config.yaml:ro
+      - loki_data:/loki
+    ports:
+      - "3100:3100" # 백엔드 서비스가 호스트에서 직접 이 포트로 로그를 push함
+    command: -config.file=/etc/loki/local-config.yaml
+
   grafana:
     image: grafana/grafana:12.3.8
     container_name: hotel-grafana
     restart: unless-stopped
     depends_on:
       - prometheus
+      - loki
     environment:
       - GF_SECURITY_ADMIN_USER=admin
       - GF_SECURITY_ADMIN_PASSWORD=admin
@@ -61,3 +73,4 @@ services:
 volumes:
   postgres_data:
   grafana_data:
+  loki_data:
