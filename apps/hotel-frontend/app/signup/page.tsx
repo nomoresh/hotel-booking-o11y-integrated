@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation"
 import { User, Mail, KeyRound, UserPlus } from "lucide-react"
 import { SiteHeader } from "@/components/site-header"
 import { SiteFooter } from "@/components/site-footer"
+import { apiFetch } from "@/lib/api"
 
 export default function SignUpPage() {
   const router = useRouter()
@@ -13,18 +14,30 @@ export default function SignUpPage() {
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [confirmPassword, setConfirmPassword] = useState("")
+  const [error, setError] = useState("")
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
-  const handleSignUp = (e: React.FormEvent) => {
+  const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault()
+    setError("")
     if (password !== confirmPassword) {
-      alert("비밀번호가 일치하지 않습니다.")
+      setError("비밀번호가 일치하지 않습니다.")
       return
     }
-    // TODO: 추후 백엔드 user-service 가입 API 연동 영역
-    console.log("회원가입 요청:", { name, email, password })
-    
-    alert("회원가입이 완료되었습니다! 로그인해 주세요.")
-    router.push("/login")
+
+    setIsSubmitting(true)
+    try {
+      await apiFetch("/api/v1/users/signup", {
+        method: "POST",
+        body: JSON.stringify({ name, email, password }),
+      })
+      alert("회원가입이 완료되었습니다! 로그인해 주세요.")
+      router.push("/login")
+    } catch (err: any) {
+      setError(err.message || "회원가입에 실패했습니다.")
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
   return (
@@ -95,11 +108,16 @@ export default function SignUpPage() {
               />
             </div>
 
+            {error && (
+              <p className="text-sm font-medium text-destructive">{error}</p>
+            )}
+
             <button
               type="submit"
-              className="mt-2 flex w-full items-center justify-center gap-2 rounded-xl bg-primary py-3.5 text-sm font-semibold text-primary-foreground transition-opacity hover:opacity-90"
+              disabled={isSubmitting}
+              className="mt-2 flex w-full items-center justify-center gap-2 rounded-xl bg-primary py-3.5 text-sm font-semibold text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-60"
             >
-              <UserPlus className="size-4" /> 가입하기
+              <UserPlus className="size-4" /> {isSubmitting ? "가입 중..." : "가입하기"}
             </button>
           </form>
 
