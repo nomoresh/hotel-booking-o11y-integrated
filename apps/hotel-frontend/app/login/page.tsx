@@ -6,19 +6,32 @@ import { useRouter } from "next/navigation"
 import { KeyRound, Mail, ArrowRight } from "lucide-react"
 import { SiteHeader } from "@/components/site-header"
 import { SiteFooter } from "@/components/site-footer"
+import { apiFetch } from "@/lib/api"
+import { setStoredUser } from "@/lib/auth"
 
 export default function LoginPage() {
   const router = useRouter()
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
+  const [error, setError] = useState("")
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
-    // TODO: 추후 백엔드 Auth API(JWT) 연동 영역
-    console.log("로그인 시도:", { email, password })
-    
-    // 임시로 로그인 성공 처리 후 메인이나 특가 페이지로 이동
-    router.push("/")
+    setError("")
+    setIsSubmitting(true)
+    try {
+      const user = await apiFetch("/api/v1/users/login", {
+        method: "POST",
+        body: JSON.stringify({ email, password }),
+      })
+      setStoredUser(user)
+      router.push("/")
+    } catch (err: any) {
+      setError(err.message || "로그인에 실패했습니다.")
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
   return (
@@ -61,11 +74,16 @@ export default function LoginPage() {
               />
             </div>
 
+            {error && (
+              <p className="text-sm font-medium text-destructive">{error}</p>
+            )}
+
             <button
               type="submit"
-              className="mt-2 flex w-full items-center justify-center gap-2 rounded-xl bg-primary py-3.5 text-sm font-semibold text-primary-foreground transition-opacity hover:opacity-90"
+              disabled={isSubmitting}
+              className="mt-2 flex w-full items-center justify-center gap-2 rounded-xl bg-primary py-3.5 text-sm font-semibold text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-60"
             >
-              로그인하기 <ArrowRight className="size-4" />
+              {isSubmitting ? "로그인 중..." : "로그인하기"} <ArrowRight className="size-4" />
             </button>
           </form>
 

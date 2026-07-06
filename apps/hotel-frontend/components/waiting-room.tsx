@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { Loader2, Users, Hourglass, ShieldAlert } from "lucide-react"
 
 interface WaitingRoomProps {
@@ -11,30 +11,35 @@ interface WaitingRoomProps {
 export function WaitingRoom({ isOpen, onSuccess }: WaitingRoomProps) {
   const [waitingCount, setWaitingCount] = useState(1753)
   const [estimatedSeconds, setEstimatedSeconds] = useState(12)
+  const hasFinishedRef = useRef(false)
 
+  // 대기열 시뮬레이션: 상태 갱신만 수행 (부수효과 없음)
   useEffect(() => {
-    if (!isOpen) return
+    if (!isOpen) {
+      hasFinishedRef.current = false
+      setWaitingCount(1753)
+      setEstimatedSeconds(12)
+      return
+    }
 
     const timer = setInterval(() => {
       setWaitingCount((prev) => {
         const nextCount = Math.max(0, prev - Math.floor(Math.random() * 150) - 50)
-        
-        if (nextCount <= 50) {
-          clearInterval(timer)
-          setTimeout(() => {
-            onSuccess()
-          }, 0)
-          return 0
-        }
-    
-        return nextCount
+        return nextCount <= 50 ? 0 : nextCount
       })
-
       setEstimatedSeconds((prev) => (prev > 1 ? prev - 1 : 1))
     }, 1000)
 
     return () => clearInterval(timer)
-  }, [isOpen, onSuccess])
+  }, [isOpen])
+
+  // 대기 완료 시점 감지: onSuccess는 여기서 정확히 한 번만 호출
+  useEffect(() => {
+    if (isOpen && waitingCount === 0 && !hasFinishedRef.current) {
+      hasFinishedRef.current = true
+      onSuccess()
+    }
+  }, [isOpen, waitingCount, onSuccess])
 
   if (!isOpen) return null
 
