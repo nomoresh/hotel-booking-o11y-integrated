@@ -1,10 +1,10 @@
-package com.hotel.user_service;
+package com.hotel.event_service;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
 
 @SpringBootTest
-class UserServiceApplicationTests {
+class EventServiceApplicationTests {
 
 	@Test
 	void contextLoads() {

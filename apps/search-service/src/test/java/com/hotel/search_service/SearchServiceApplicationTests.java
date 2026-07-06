@@ -1,10 +1,10 @@
-package com.hotel.user_service;
+package com.hotel.search_service;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
 
 @SpringBootTest
-class UserServiceApplicationTests {
+class SearchServiceApplicationTests {
 
 	@Test
 	void contextLoads() {
