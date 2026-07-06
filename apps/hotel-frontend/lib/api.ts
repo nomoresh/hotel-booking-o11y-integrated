@@ -34,7 +34,7 @@ export async function apiFetch(endpoint: string, options: RequestInit = {}) {
     throw error
   }
 
-  // 204 No Content 같은 응답 처리
-  if (response.status === 204) return null
-  return response.json()
+  // 204 No Content나 로그아웃처럼 본문이 비어있는 200 응답도 안전하게 처리
+  const text = await response.text()
+  return text ? JSON.parse(text) : null
 }
