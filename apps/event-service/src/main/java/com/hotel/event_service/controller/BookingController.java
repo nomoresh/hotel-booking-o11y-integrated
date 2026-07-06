@@ -55,8 +55,12 @@ public class BookingController {
             return unauthorized();
         }
 
-        // hotelId가 특가 상품과 일치하면 선착순 재고 확보를 먼저 시도 (일반 예약은 재고 개념이 없어 통과)
+        // hotelId가 특가 상품과 일치하면 인당 구매 제한 확인 후 선착순 재고 확보를 시도 (일반 예약은 통과)
         boolean isEventDeal = eventDealRepository.existsById(request.hotelId());
+        if (isEventDeal && bookingRepository.existsByUserEmailAndHotelId(email, request.hotelId())) {
+            return ResponseEntity.status(HttpStatus.CONFLICT)
+                    .body(Map.of("message", "이 특가 상품은 인당 1개까지만 구매할 수 있습니다."));
+        }
         if (isEventDeal && !inventoryService.tryReserve(request.hotelId())) {
             return ResponseEntity.status(HttpStatus.CONFLICT)
                     .body(Map.of("message", "선착순 마감되었습니다."));
