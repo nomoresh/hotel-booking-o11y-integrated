@@ -9,7 +9,7 @@
 
 
 ### ✨ 핵심 차별화 포인트
-- **통합 관찰성 (Unified O11y):** Grafana를 중심으로 메트릭 조회 중 특정 에러 로그를 확인하고, 해당 로그의 `traceId`를 통해 분산 추적(Tempo)으로 즉시 점프하는 단일 화면 분석 체계 구축.
+- **통합 관찰성 (Unified O11y):** Grafana를 중심으로 메트릭 조회 중 특정 에러 로그를 확인하고, 해당 로그의 `traceId`를 통해 분산 추적(Tempo)으로 즉시 점프하는 단일 화면 분석 체계 구축. **(✅ 구현 완료 — 5. 구현 현황 참고)**
 - **실전형 부하 시뮬레이션:** K6를 활용하여 특가 오픈 시점의 피크 트래픽을 재현하고, 임베디드 카오스 시나리오(Pod Eviction, CPU Throttle)를 통해 알림 및 복구 메커니즘 검증.
 - **자동화된 장애 대응:** 프로메테우스 Alertmanager 알림 메시지에 실시간 대시보드 링크와 구체적인 조치 절차가 담긴 **런북(Runbook)**을 포함하여 MTTR(평균 복구 시간) 최소화.
 
@@ -53,7 +53,7 @@
 - **`hotel-frontend` (Next.js):** 특가 상품 노출 및 실시간 예약 대시보드 UI. *(포트 3000)*
 - **`user-service`:** 회원가입/로그인/로그아웃. BCrypt 비밀번호 해싱, JWT를 HttpOnly 쿠키로 발급. *(포트 8083)*
 - **`search-service`:** 호텔 및 리조트 정보 조회. 지역/키워드/가격대/평점 조건별 검색과 정렬을 지원하며, 검색 결과는 Caffeine 기반 인메모리 캐시(TTL 5분)로 응답. 프론트 `/search` 페이지가 실제로 이 API를 호출하며, 응답받은 `id`를 프론트의 정적 호텔 데이터(이미지·태그 등 상세 정보)와 매칭해 화면을 구성함. *(포트 8085)*
-- **`event-service`:** 예약 생성/조회/취소 및 특가 선착순 재고 관리. Redis 원자 연산(Lua 스크립트)으로 재고 초과 판매 방지, 인당 구매 개수 제한. 예약 생성 시 search-service를 호출해 결제 금액을 서버가 직접 재계산·검증(클라이언트 조작 방지, search-service 장애 시 503). 예약 취소는 일반 예약만 체크인 하루 전까지 가능하며 특가 상품은 취소 불가. *(포트 8084)*
+- **`event-service`:** 예약 생성/조회/취소 및 특가 선착순 재고 관리. Redis 원자 연산(Lua 스크립트)으로 재고 초과 판매 방지, 인당 구매 개수 제한. 예약 생성 시 search-service를 호출해 결제 금액을 서버가 직접 재계산·검증(클라이언트 조작 방지, search-service 장애 시 503) — 이 호출은 분산 트레이싱으로 두 서비스가 하나의 트레이스에 묶여 추적됨. 예약 취소는 일반 예약만 체크인 하루 전까지 가능하며 특가 상품은 취소 불가. *(포트 8084)*
 - **`notice-service`:** 예약 완료 후 비동기로 알림 전송 (분산 추적 컨텍스트 전파 검증용). *(계획 단계, 메시지 큐 선정부터 필요 — 아직 미착수)*
 
 ### 📊 [2] Observability 통합 흐름 (O11y Pipeline)
@@ -61,11 +61,13 @@
 ──(Structured Log)─> [ Promtail ] ────────> [ Grafana Loki ]  ──┼─> [ Grafana UI ]
 ──(Traces Context)─> [ Otel Collector ] ──> [ Grafana Tempo ] ──┘
 
-> **메트릭·로그(2/3축) 완료.** 3개 서비스 모두 Micrometer + `micrometer-registry-prometheus`로 `/actuator/prometheus`를 노출하고,
+> **메트릭·로그·트레이싱(3/3축) 완료.** 3개 서비스 모두 Micrometer + `micrometer-registry-prometheus`로 `/actuator/prometheus`를 노출하고,
 > 로컬 Prometheus가 15초 주기로 스크래핑. 로그는 Promtail 없이 Logback(`loki-logback-appender`)이 Loki로 직접 push (서비스가
-> 컨테이너가 아니라 호스트에서 떠 있어 파일 tail 방식보다 이 방식이 단순함). Grafana가 자동 프로비저닝된 대시보드
-> (`observability/grafana/dashboards/msa-golden-signals.json`)로 요청 처리량 · 에러율 · p95 지연시간 · JVM 힙 사용량 · 최근 로그를
-> 한 화면에서 보여줌. 트레이싱(Tempo)은 아직 미착수 — 5. 구현 현황 참고.
+> 컨테이너가 아니라 호스트에서 떠 있어 파일 tail 방식보다 이 방식이 단순함). 분산 추적은 Micrometer Tracing(OTel 브릿지)이 OTLP로
+> Tempo에 직접 push — event-service가 결제 금액 검증을 위해 search-service를 호출하는 구간이 실제로 하나의 트레이스 안에
+> 두 서비스 스팬으로 이어지는 것까지 확인함. 로그 본문에 `trace_id`를 노출해 Grafana에서 로그 ↔ 트레이스 양방향 점프가 가능함.
+> Grafana가 자동 프로비저닝된 대시보드(`observability/grafana/dashboards/msa-golden-signals.json`)로 요청 처리량 · 에러율 ·
+> p95 지연시간 · JVM 힙 사용량 · 최근 로그를 한 화면에서 보여줌.
 
 ---
 
@@ -85,18 +87,19 @@
 | **예약** | 선착순 재고 관리 (Redis 원자 연산, 오버셀 방지, 인당 구매 제한) | ✅ 완료 |
 | **예약** | 예약 취소 (일반 예약만, 체크인 하루 전까지) + 마이페이지 취소 버튼 연동 | ✅ 완료 |
 | **예약** | 결제 금액 서버 측 검증 (search-service 실호출로 재계산) | ✅ 완료 |
-| **인프라** | 로컬 Docker Compose (Postgres + Redis + Prometheus + Grafana + Loki) | ✅ 완료 |
+| **인프라** | 로컬 Docker Compose (Postgres + Redis + Prometheus + Grafana + Loki + Tempo) | ✅ 완료 |
 | **인프라** | K8s 매니페스트 / Helm / ArgoCD GitOps | ⬜ 미착수 |
 | **인프라** | CI/CD (GitHub Actions) | ⬜ 미착수 |
 | **Observability** | 메트릭 (Micrometer + Prometheus, 3개 서비스 전체) | ✅ 완료 |
 | **Observability** | Grafana 대시보드 (요청량·에러율·p95·JVM 힙·로그, 자동 프로비저닝) | ✅ 완료 |
 | **Observability** | 로그 (Loki, Logback → 직접 push) | ✅ 완료 |
-| **Observability** | 분산 추적 (OpenTelemetry + Tempo) | ⬜ 미착수 |
+| **Observability** | 분산 추적 (Micrometer Tracing + OTel + Tempo, 서비스 간 전파 확인) | ✅ 완료 |
+| **Observability** | 로그 ↔ 트레이스 상호 점프 (Grafana derivedFields / tracesToLogsV2) | ✅ 완료 |
 | **Observability** | Alertmanager 런북 | ⬜ 미착수 |
 | **알림** | notice-service (비동기 알림, 트레이스 전파 검증) | ⬜ 미착수 — 메시지 큐 선정부터 필요 |
 | **부하 테스트** | K6 시나리오 | ⬜ 미착수 |
 
-> 로컬에서 회원가입 → 로그인 → 호텔 검색(키워드/정렬) → 특가 예약(재고 차감 포함) → 마이페이지까지 전 구간을 브라우저에서 실제로 실행/검증했고, 3개 서비스의 메트릭·로그가 Grafana 대시보드 한 화면에서 실시간 확인됩니다. 다음 단계는 분산 추적(Tempo)입니다.
+> 로컬에서 회원가입 → 로그인 → 호텔 검색(키워드/정렬) → 특가 예약(재고 차감 포함) → 마이페이지까지 전 구간을 브라우저에서 실제로 실행/검증했고, Observability 3축(메트릭·로그·트레이싱) 모두 Grafana 한 화면에서 실시간 확인됩니다. 다음 단계는 K6 부하 테스트 또는 인프라(K8s/CI-CD)입니다.
 
 ---
 
@@ -109,17 +112,18 @@ hotel-booking-o11y-integrated/
 │   ├── user-service/             # 회원가입/로그인/로그아웃 (포트 8083)
 │   ├── event-service/            # 예약 생성/조회, 선착순 재고 관리 (포트 8084)
 │   └── search-service/           # 호텔 조회 서비스 (포트 8085)
-├── observability/                # 관찰성 인프라 설정 (메트릭·로그 구현, 트레이싱은 예정)
+├── observability/                # 관찰성 인프라 설정 (메트릭·로그·트레이싱 모두 구현)
 │   ├── prometheus/prometheus.yml         # 3개 서비스 스크래핑 설정
 │   ├── loki/loki-config.yaml              # 로그 저장소 설정 (filesystem, 단일 프로세스)
+│   ├── tempo/tempo.yaml                   # 트레이스 저장소 설정 (OTLP 수신, filesystem)
 │   └── grafana/
-│       ├── provisioning/                 # 데이터소스(Prometheus·Loki)·대시보드 자동 등록
+│       ├── provisioning/                 # 데이터소스(Prometheus·Loki·Tempo)·대시보드 자동 등록, 로그↔트레이스 연동
 │       └── dashboards/msa-golden-signals.json
-└── docker-compose.yml            # 로컬 개발용 Postgres + Redis + Prometheus + Grafana + Loki
+└── docker-compose.yml            # 로컬 개발용 Postgres + Redis + Prometheus + Grafana + Loki + Tempo
 
 ```
 
-> `infra/`(K8s·Helm), `load-test/`(K6), `notice-service/`는 아직 만들어지지 않았습니다. `observability/`는 메트릭·로그까지 구현되어 있고 트레이싱(Tempo) 설정은 이후 추가될 예정입니다.
+> `infra/`(K8s·Helm), `load-test/`(K6), `notice-service/`는 아직 만들어지지 않았습니다. `observability/`는 메트릭·로그·트레이싱 3축 모두 구현되어 있습니다.
 
 ## 📊 7. 핵심 모니터링 및 알림 설계 (SLO & Alerts)
 ```text
@@ -135,9 +139,9 @@ hotel-booking-o11y-integrated/
 Prerequisites
 - Node.js v20+ 및 npm
 - Java 21, Gradle
-- Docker Desktop (Postgres·Redis·Prometheus·Grafana·Loki 컨테이너 실행용)
+- Docker Desktop (Postgres·Redis·Prometheus·Grafana·Loki·Tempo 컨테이너 실행용)
 
-1) 인프라 기동 (Postgres 5433, Redis 6379, Prometheus 9090, Loki 3100, Grafana 3001)
+1) 인프라 기동 (Postgres 5433, Redis 6379, Prometheus 9090, Loki 3100, Tempo 3200/4317/4318, Grafana 3001)
 ```bash
 docker compose up -d
 ```
@@ -158,4 +162,4 @@ npm run dev
 브라우저에서 http://localhost:3000으로 접속하여 회원가입 → 로그인 → 호텔 조회 → 예약까지 확인할 수 있습니다.
 
 4) 모니터링 대시보드 확인
-http://localhost:3001 (Grafana, 계정 admin/admin) 접속 → **MSA Golden Signals** 대시보드에서 3개 서비스의 요청량·에러율·p95 지연시간·JVM 힙 사용량과 최근 로그를 한 화면에서 확인. Prometheus 자체 UI는 http://localhost:9090/targets, Loki는 Grafana Explore 탭에서 `{app="event-service"}` 같은 LogQL로 직접 조회 가능.
+http://localhost:3001 (Grafana, 계정 admin/admin) 접속 → **MSA Golden Signals** 대시보드에서 3개 서비스의 요청량·에러율·p95 지연시간·JVM 힙 사용량과 최근 로그를 한 화면에서 확인. Prometheus 자체 UI는 http://localhost:9090/targets, Loki·Tempo는 Grafana Explore 탭에서 조회 (`{app="event-service"}` 같은 LogQL, 또는 로그의 `trace_id=...` 클릭 시 해당 트레이스로 바로 이동).

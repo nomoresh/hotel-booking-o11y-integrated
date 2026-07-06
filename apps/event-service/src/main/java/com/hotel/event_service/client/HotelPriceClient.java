@@ -14,8 +14,10 @@ public class HotelPriceClient {
 
     private final RestClient restClient;
 
-    public HotelPriceClient(@Value("${search-service.base-url}") String baseUrl) {
-        this.restClient = RestClient.create(baseUrl);
+    // RestClient.create(baseUrl) 대신 Spring이 자동 구성한 RestClient.Builder를 주입받아 사용해야
+    // 관측(Observation) 계측이 붙어서 트레이스 컨텍스트가 이 호출을 통해 search-service로 전파됨
+    public HotelPriceClient(RestClient.Builder restClientBuilder, @Value("${search-service.base-url}") String baseUrl) {
+        this.restClient = restClientBuilder.baseUrl(baseUrl).build();
     }
 
     public Optional<Integer> getBasePrice(String hotelId) {

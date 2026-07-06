@@ -11,6 +11,10 @@
         <http>
             <url>http://localhost:3100/loki/api/v1/push</url>
         </http>
+        <!-- Grafana에서 로그 -> 트레이스로 점프하려면 traceId가 로그 본문 텍스트에 보여야 함 -->
+        <message>
+            <pattern>[%thread] %logger{36} - %msg trace_id=%X{traceId:-} span_id=%X{spanId:-}%n</pattern>
+        </message>
         <batch>
             <timeoutMs>5000</timeoutMs>
         </batch>

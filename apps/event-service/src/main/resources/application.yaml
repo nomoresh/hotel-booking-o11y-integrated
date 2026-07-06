@@ -35,3 +35,9 @@ management:
     distribution:
       percentiles-histogram:
         http.server.requests: true
+  tracing:
+    sampling:
+      probability: 1.0 # 로컬 데모용 — 모든 요청을 샘플링 (운영에서는 낮춰야 함)
+  otlp:
+    tracing:
+      endpoint: http://localhost:4318/v1/traces

@@ -7,3 +7,9 @@ datasources:
     access: proxy
     url: http://loki:3100
     editable: false
+    jsonData:
+      # 로그 화면에서 trace_id=... 텍스트를 감지해 바로 Tempo 트레이스로 점프
+      derivedFields:
+        - datasourceUid: tempo
+          matcherRegex: "trace_id=(\\w+)"
+          name: TraceID
