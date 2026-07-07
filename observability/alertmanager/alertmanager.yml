@@ -1,0 +1,60 @@
+global:
+  resolve_timeout: 5m
+  slack_api_url: 'https://hooks.slack.com/services/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'
+
+route:
+  group_by: ['alertname', 'job']
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 1h
+  receiver: 'slack-alerts'
+  routes:
+    - match:
+        severity: critical
+      receiver: 'slack-critical'
+    - match:
+        severity: warning
+      receiver: 'slack-warning'
+
+receivers:
+  - name: 'slack-alerts'
+    slack_configs:
+      - channel: '#deploy-status'
+        send_resolved: true
+        title: '[{{ .Status | toUpper }}] {{ .CommonLabels.alertname }}'
+        text: >-
+          {{ range .Alerts }}
+          *서비스:* {{ .Labels.job }}
+          *설명:* {{ .Annotations.description }}
+          {{ end }}
+
+  - name: 'slack-critical'
+    slack_configs:
+      - channel: '#deploy-status'
+        send_resolved: true
+        icon_emoji: ':red_circle:'
+        title: '🚨 [CRITICAL] {{ .CommonLabels.alertname }}'
+        text: >-
+          {{ range .Alerts }}
+          *서비스:* {{ .Labels.job }}
+          *설명:* {{ .Annotations.description }}
+          {{ end }}
+
+  - name: 'slack-warning'
+    slack_configs:
+      - channel: '#deploy-status'
+        send_resolved: true
+        icon_emoji: ':warning:'
+        title: '⚠️ [WARNING] {{ .CommonLabels.alertname }}'
+        text: >-
+          {{ range .Alerts }}
+          *서비스:* {{ .Labels.job }}
+          *설명:* {{ .Annotations.description }}
+          {{ end }}
+
+inhibit_rules:
+  - source_match:
+      severity: 'critical'
+    target_match:
+      severity: 'warning'
+    equal: ['alertname', 'job']
