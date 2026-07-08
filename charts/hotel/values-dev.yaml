@@ -1,0 +1,30 @@
+global:
+  namespace: dev
+  imageRegistry: 074467724762.dkr.ecr.ap-northeast-2.amazonaws.com
+  imagePullPolicy: Always
+
+
+services:
+  user:
+    enabled: true
+    name: hotel-svc-user
+    imageName: hotel-svc-user
+    imageTag: df2cd34
+    port: 8080
+    replicas: 1
+
+  search:
+    enabled: true
+    name: hotel-svc-search
+    imageName: hotel-svc-search
+    imageTag: df2cd34
+    port: 8080
+    replicas: 1
+
+  event:
+    enabled: true
+    name: hotel-svc-event
+    imageName: hotel-svc-event
+    imageTag: df2cd34
+    port: 8080
+    replicas: 1
