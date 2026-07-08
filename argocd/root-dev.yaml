@@ -9,7 +9,7 @@ spec:
 
   source:
     repoURL: https://github.com/nomoresh/hotel-booking-o11y-integrated.git
-    targetRevision: dev,joon
+    targetRevision: joon
     path: argocd/apps/dev
 
   destination:
