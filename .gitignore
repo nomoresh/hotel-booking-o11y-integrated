@@ -40,4 +40,4 @@ crash.log
 crash.*.log
 
 # 임시 잠금 파일
-.terraform.tfstate.lock.info
+.terraform.tfstate.lock.info.env

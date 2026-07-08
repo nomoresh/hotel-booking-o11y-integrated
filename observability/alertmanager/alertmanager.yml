@@ -1,6 +1,6 @@
 global:
   resolve_timeout: 5m
-  slack_api_url: 'https://hooks.slack.com/services/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'
+  slack_api_url: '${SLACK_WEBHOOK_URL}'
 
 route:
   group_by: ['alertname', 'job']
@@ -19,7 +19,7 @@ route:
 receivers:
   - name: 'slack-alerts'
     slack_configs:
-      - channel: '#deploy-status'
+      - channel: '#hotel-alerts'
         send_resolved: true
         title: '[{{ .Status | toUpper }}] {{ .CommonLabels.alertname }}'
         text: >-
@@ -30,7 +30,7 @@ receivers:
 
   - name: 'slack-critical'
     slack_configs:
-      - channel: '#deploy-status'
+      - channel: '#hotel-alerts'
         send_resolved: true
         icon_emoji: ':red_circle:'
         title: '🚨 [CRITICAL] {{ .CommonLabels.alertname }}'
@@ -42,7 +42,7 @@ receivers:
 
   - name: 'slack-warning'
     slack_configs:
-      - channel: '#deploy-status'
+      - channel: '#hotel-alerts'
         send_resolved: true
         icon_emoji: ':warning:'
         title: '⚠️ [WARNING] {{ .CommonLabels.alertname }}'

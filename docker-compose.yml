@@ -45,6 +45,8 @@ services:
     image: prom/alertmanager:v0.27.0
     container_name: hotel-alertmanager
     restart: unless-stopped
+    env_file:
+      - .env
     volumes:
       - ./observability/alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
     ports:
