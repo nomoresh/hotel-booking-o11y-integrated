@@ -1,0 +1,48 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hotel-postgres
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    app: hotel-postgres
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: hotel-postgres
+  template:
+    metadata:
+      labels:
+        app: hotel-postgres
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:16
+          ports:
+            - containerPort: 5432
+          env:
+            - name: POSTGRES_DB
+              value: {{ .Values.database.name | quote }}
+            - name: POSTGRES_USER
+              value: {{ .Values.database.username | quote }}
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.database.secretName }}
+                  key: password
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: hotel-postgres
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    app: hotel-postgres
+spec:
+  type: ClusterIP
+  selector:
+    app: hotel-postgres
+  ports:
+    - name: postgres
+      port: 5432
+      targetPort: 5432

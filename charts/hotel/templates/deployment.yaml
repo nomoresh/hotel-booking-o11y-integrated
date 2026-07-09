@@ -23,6 +23,20 @@ spec:
           imagePullPolicy: {{ $.Values.global.imagePullPolicy }}
           ports:
             - containerPort: {{ $svc.port }}
+          env:
+            - name: SPRING_DATASOURCE_URL
+              value: "jdbc:postgresql://{{ $.Values.database.host }}:{{ $.Values.database.port }}/{{ $.Values.database.name }}"
+            - name: SPRING_DATASOURCE_USERNAME
+              value: "{{ $.Values.database.username }}"
+            - name: SPRING_DATASOURCE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $.Values.database.secretName }}
+                  key: password
+            - name: SPRING_DATA_REDIS_HOST
+              value: "{{ $.Values.redis.host }}"
+            - name: SPRING_DATA_REDIS_PORT
+              value: "{{ $.Values.redis.port }}"
 ---
 {{- end }}
 {{- end }}
