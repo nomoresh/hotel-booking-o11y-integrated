@@ -1,0 +1,179 @@
+name: Dev CI/CD
+
+on:
+  push:
+    branches:
+      - dev
+    paths:
+      - "apps/**"
+      - "charts/**"
+      - ".github/workflows/cicd-dev.yaml"
+
+permissions:
+  contents: write
+  packages: write
+
+concurrency:
+  group: dev-cicd
+  cancel-in-progress: true
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_TAG: dev-${{ github.sha }}
+  VALUES_FILE: charts/hotel/values-dev.yaml
+
+jobs:
+  detect-changes:
+    runs-on: ubuntu-latest
+
+    outputs:
+      frontend: ${{ steps.filter.outputs.frontend }}
+      user: ${{ steps.filter.outputs.user }}
+      search: ${{ steps.filter.outputs.search }}
+      event: ${{ steps.filter.outputs.event }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Detect changed services
+        id: filter
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            frontend:
+              - 'apps/hotel-frontend/**'
+            user:
+              - 'apps/user-service/**'
+            search:
+              - 'apps/search-service/**'
+            event:
+              - 'apps/event-service/**'
+
+  build-and-push:
+    needs: detect-changes
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        include:
+          - service_key: frontend
+            image_name: hotel-frontend
+            context: apps/hotel-frontend
+            changed: ${{ needs.detect-changes.outputs.frontend }}
+
+          - service_key: user
+            image_name: hotel-user-service
+            context: apps/user-service
+            changed: ${{ needs.detect-changes.outputs.user }}
+
+          - service_key: search
+            image_name: hotel-search-service
+            context: apps/search-service
+            changed: ${{ needs.detect-changes.outputs.search }}
+
+          - service_key: event
+            image_name: hotel-event-service
+            context: apps/event-service
+            changed: ${{ needs.detect-changes.outputs.event }}
+
+    steps:
+      - name: Skip unchanged service
+        if: matrix.changed != 'true'
+        run: |
+          echo "${{ matrix.service_key }} service not changed. Skip build."
+
+      - name: Checkout
+        if: matrix.changed == 'true'
+        uses: actions/checkout@v4
+
+      - name: Set lowercase owner
+        if: matrix.changed == 'true'
+        shell: bash
+        run: |
+          echo "OWNER_LOWER=${GITHUB_REPOSITORY_OWNER,,}" >> $GITHUB_ENV
+
+      - name: Login to GHCR
+        if: matrix.changed == 'true'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        if: matrix.changed == 'true'
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push image
+        if: matrix.changed == 'true'
+        uses: docker/build-push-action@v6
+        with:
+          context: ./${{ matrix.context }}
+          push: true
+          tags: |
+            ghcr.io/${{ env.OWNER_LOWER }}/${{ matrix.image_name }}:${{ env.IMAGE_TAG }}
+            ghcr.io/${{ env.OWNER_LOWER }}/${{ matrix.image_name }}:dev-latest
+
+  update-values:
+    needs:
+      - detect-changes
+      - build-and-push
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout dev branch
+        uses: actions/checkout@v4
+        with:
+          ref: dev
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set lowercase owner
+        shell: bash
+        run: |
+          echo "OWNER_LOWER=${GITHUB_REPOSITORY_OWNER,,}" >> $GITHUB_ENV
+
+      - name: Install yq
+        shell: bash
+        run: |
+          sudo wget -qO /usr/local/bin/yq https://github.com/mikefarah/yq/releases/download/v4.44.3/yq_linux_amd64
+          sudo chmod +x /usr/local/bin/yq
+          yq --version
+
+      - name: Update values-dev.yaml image tags
+        shell: bash
+        run: |
+          if [ "${{ needs.detect-changes.outputs.frontend }}" = "true" ]; then
+            yq -i '.images.frontend.repository = "ghcr.io/${{ env.OWNER_LOWER }}/hotel-frontend"' $VALUES_FILE
+            yq -i '.images.frontend.tag = "${{ env.IMAGE_TAG }}"' $VALUES_FILE
+          fi
+
+          if [ "${{ needs.detect-changes.outputs.user }}" = "true" ]; then
+            yq -i '.images.user.repository = "ghcr.io/${{ env.OWNER_LOWER }}/hotel-user-service"' $VALUES_FILE
+            yq -i '.images.user.tag = "${{ env.IMAGE_TAG }}"' $VALUES_FILE
+          fi
+
+          if [ "${{ needs.detect-changes.outputs.search }}" = "true" ]; then
+            yq -i '.images.search.repository = "ghcr.io/${{ env.OWNER_LOWER }}/hotel-search-service"' $VALUES_FILE
+            yq -i '.images.search.tag = "${{ env.IMAGE_TAG }}"' $VALUES_FILE
+          fi
+
+          if [ "${{ needs.detect-changes.outputs.event }}" = "true" ]; then
+            yq -i '.images.event.repository = "ghcr.io/${{ env.OWNER_LOWER }}/hotel-event-service"' $VALUES_FILE
+            yq -i '.images.event.tag = "${{ env.IMAGE_TAG }}"' $VALUES_FILE
+          fi
+
+      - name: Commit and push updated values-dev.yaml
+        shell: bash
+        run: |
+          if git diff --quiet; then
+            echo "No values-dev.yaml changes."
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          git add $VALUES_FILE
+          git commit -m "ci: update dev image tags [skip ci]"
+          git push origin dev
