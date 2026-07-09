@@ -295,7 +295,7 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
           git add "$VALUES_FILE"
-          git commit -m "ci: update ECR image tags [skip ci]"
+          git commit -m "ci: update ECR image tags ${IMAGE_TAG} [skip ci]"
           git push origin joon
 
   notify-slack:
