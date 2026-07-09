@@ -4,7 +4,7 @@ set -euo pipefail
 CLUSTER_NAME="${CLUSTER_NAME:-nomoresh}"
 REGION="${REGION:-ap-northeast-2}"
 PROFILE="${PROFILE:-nomoresh}"
-PORT="${PORT:-8081}"
+PORT="${PORT:-8080}"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in

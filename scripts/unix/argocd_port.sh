@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-PORT="${PORT:-8081}"
+PORT="${PORT:-8080}"
 CLUSTER_NAME="${CLUSTER_NAME:-nomoresh}"
 REGION="${REGION:-ap-northeast-2}"
 PROFILE="${PROFILE:-nomoresh}"

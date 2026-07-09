@@ -1,5 +1,5 @@
 param(
-  [int]$Port = 8081,
+  [int]$Port = 8080,
   [string]$ClusterName = "nomoresh",
   [string]$Region = "ap-northeast-2",
   [string]$Profile = "nomoresh"
