@@ -10,7 +10,7 @@ services:
     name: hotel-svc-user
     imageName: hotel-svc-user
     imageTag: df2cd34
-    port: 8080
+    port: 8083
     replicas: 1
 
   search:
@@ -18,7 +18,7 @@ services:
     name: hotel-svc-search
     imageName: hotel-svc-search
     imageTag: df2cd34
-    port: 8080
+    port: 8085
     replicas: 1
 
   event:
@@ -26,5 +26,5 @@ services:
     name: hotel-svc-event
     imageName: hotel-svc-event
     imageTag: df2cd34
-    port: 8080
+    port: 8084
     replicas: 1

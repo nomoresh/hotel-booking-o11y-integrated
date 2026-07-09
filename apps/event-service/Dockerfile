@@ -24,6 +24,13 @@ WORKDIR /app
 # 빌드 스테이지에서 생성된 최적화 jar 파일만 쏙 빼오기
 COPY --from=builder /build/build/libs/*.jar app.jar
 
+# 1001 user
+RUN groupadd -g 1001 appuser \
+    && useradd -u 1001 -g 1001 -m appuser \
+    && chown -R appuser:appuser /app
+
+USER appuser
+
 # 인프라 환경에서 덤프 및 타임존 설정을 위한 환경 변수
 ENV TZ=Asia/Seoul
 

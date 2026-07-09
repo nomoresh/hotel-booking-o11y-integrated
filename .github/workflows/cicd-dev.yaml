@@ -1,36 +1,61 @@
-name: Dev CI/CD
+name: DEV ECR CI/CD
 
 on:
   push:
     branches:
-      - dev
+      - joon
     paths:
-      - "apps/**"
-      - "charts/**"
+      - "apps/user-service/**"
+      - "apps/search-service/**"
+      - "apps/event-service/**"
+      - "charts/hotel/values-dev.yaml"
       - ".github/workflows/cicd-dev.yaml"
+
+  pull_request:
+    branches:
+      - joon
+    paths:
+      - "apps/user-service/**"
+      - "apps/search-service/**"
+      - "apps/event-service/**"
+      - "charts/hotel/values-dev.yaml"
+      - ".github/workflows/cicd-dev.yaml"
+
+  workflow_dispatch:
+    inputs:
+      build_all:
+        description: "Build all backend services"
+        required: true
+        default: "true"
+        type: choice
+        options:
+          - "true"
+          - "false"
 
 permissions:
   contents: write
-  packages: write
 
 concurrency:
-  group: dev-cicd
+  group: cicd-dev
   cancel-in-progress: true
 
 env:
-  REGISTRY: ghcr.io
-  IMAGE_TAG: dev-${{ github.sha }}
+  AWS_REGION: ap-northeast-2
+  AWS_ACCOUNT_ID: "074467724762"
+  ECR_REGISTRY: 074467724762.dkr.ecr.ap-northeast-2.amazonaws.com
+  IMAGE_TAG: ${{ github.sha }}
   VALUES_FILE: charts/hotel/values-dev.yaml
 
 jobs:
   detect-changes:
+    name: Detect changed services
     runs-on: ubuntu-latest
 
     outputs:
-      frontend: ${{ steps.filter.outputs.frontend }}
       user: ${{ steps.filter.outputs.user }}
       search: ${{ steps.filter.outputs.search }}
       event: ${{ steps.filter.outputs.event }}
+      build_all: ${{ steps.build_all.outputs.value }}
 
     steps:
       - name: Checkout
@@ -41,8 +66,6 @@ jobs:
         uses: dorny/paths-filter@v3
         with:
           filters: |
-            frontend:
-              - 'apps/hotel-frontend/**'
             user:
               - 'apps/user-service/**'
             search:
@@ -50,88 +73,181 @@ jobs:
             event:
               - 'apps/event-service/**'
 
-  build-and-push:
+      - name: Resolve build_all option
+        id: build_all
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ inputs.build_all }}" = "true" ]; then
+            echo "value=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "value=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  test-build-scan-push:
+    name: Test, build, scan and push
     needs: detect-changes
     runs-on: ubuntu-latest
 
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: hoteldb
+          POSTGRES_USER: hotel
+          POSTGRES_PASSWORD: hotel1234
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd "pg_isready -U hotel -d hoteldb"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
     strategy:
+      fail-fast: false
       matrix:
         include:
-          - service_key: frontend
-            image_name: hotel-frontend
-            context: apps/hotel-frontend
-            changed: ${{ needs.detect-changes.outputs.frontend }}
-
           - service_key: user
-            image_name: hotel-user-service
+            service_name: user-service
             context: apps/user-service
-            changed: ${{ needs.detect-changes.outputs.user }}
+            ecr_repo: hotel-svc-user
+            values_key: user
+            changed_output: user
 
           - service_key: search
-            image_name: hotel-search-service
+            service_name: search-service
             context: apps/search-service
-            changed: ${{ needs.detect-changes.outputs.search }}
+            ecr_repo: hotel-svc-search
+            values_key: search
+            changed_output: search
 
           - service_key: event
-            image_name: hotel-event-service
+            service_name: event-service
             context: apps/event-service
-            changed: ${{ needs.detect-changes.outputs.event }}
+            ecr_repo: hotel-svc-event
+            values_key: event
+            changed_output: event
 
     steps:
-      - name: Skip unchanged service
-        if: matrix.changed != 'true'
-        run: |
-          echo "${{ matrix.service_key }} service not changed. Skip build."
-
-      - name: Checkout
-        if: matrix.changed == 'true'
+      - name: Checkout dev branch
         uses: actions/checkout@v4
 
-      - name: Set lowercase owner
-        if: matrix.changed == 'true'
+      - name: Decide whether to build this service
+        id: should_build
         shell: bash
         run: |
-          echo "OWNER_LOWER=${GITHUB_REPOSITORY_OWNER,,}" >> $GITHUB_ENV
+          SHOULD_BUILD="false"
 
-      - name: Login to GHCR
-        if: matrix.changed == 'true'
-        uses: docker/login-action@v3
+          if [ "${{ needs.detect-changes.outputs.build_all }}" = "true" ]; then
+            SHOULD_BUILD="true"
+          fi
+
+          if [ "${{ matrix.service_key }}" = "user" ] && [ "${{ needs.detect-changes.outputs.user }}" = "true" ]; then
+            SHOULD_BUILD="true"
+          fi
+
+          if [ "${{ matrix.service_key }}" = "search" ] && [ "${{ needs.detect-changes.outputs.search }}" = "true" ]; then
+            SHOULD_BUILD="true"
+          fi
+
+          if [ "${{ matrix.service_key }}" = "event" ] && [ "${{ needs.detect-changes.outputs.event }}" = "true" ]; then
+            SHOULD_BUILD="true"
+          fi
+
+          echo "value=$SHOULD_BUILD" >> "$GITHUB_OUTPUT"
+          echo "SHOULD_BUILD=$SHOULD_BUILD" >> "$GITHUB_ENV"
+
+      - name: Skip unchanged service
+        if: env.SHOULD_BUILD != 'true'
+        run: |
+          echo "${{ matrix.service_name }} was not changed. Skipping."
+
+      - name: Set up JDK 21
+        if: env.SHOULD_BUILD == 'true'
+        uses: actions/setup-java@v4
         with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          distribution: temurin
+          java-version: "21"
+          cache: gradle
+
+      - name: Run unit tests
+        if: env.SHOULD_BUILD == 'true'
+        working-directory: ${{ matrix.context }}
+        shell: bash
+        run: |
+          chmod +x ./gradlew
+          ./gradlew test --no-daemon
+
+      - name: Configure AWS credentials
+        if: env.SHOULD_BUILD == 'true' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        if: env.SHOULD_BUILD == 'true' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+        uses: aws-actions/amazon-ecr-login@v2
 
       - name: Set up Docker Buildx
-        if: matrix.changed == 'true'
+        if: env.SHOULD_BUILD == 'true'
         uses: docker/setup-buildx-action@v3
 
-      - name: Build and push image
-        if: matrix.changed == 'true'
+      - name: Build Docker image locally
+        if: env.SHOULD_BUILD == 'true'
         uses: docker/build-push-action@v6
         with:
           context: ./${{ matrix.context }}
-          push: true
+          push: false
+          load: true
           tags: |
-            ghcr.io/${{ env.OWNER_LOWER }}/${{ matrix.image_name }}:${{ env.IMAGE_TAG }}
-            ghcr.io/${{ env.OWNER_LOWER }}/${{ matrix.image_name }}:dev-latest
+            ${{ env.ECR_REGISTRY }}/${{ matrix.ecr_repo }}:${{ env.IMAGE_TAG }}
+            ${{ env.ECR_REGISTRY }}/${{ matrix.ecr_repo }}:joon-latest
+
+      - name: Run Trivy vulnerability scan
+        if: env.SHOULD_BUILD == 'true'
+        uses: aquasecurity/trivy-action@0.24.0
+        with:
+          image-ref: ${{ env.ECR_REGISTRY }}/${{ matrix.ecr_repo }}:${{ env.IMAGE_TAG }}
+          format: table
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
+      # 추후 sarif 추가해서 보안 강화 
+
+      - name: Push Docker image to ECR
+        if: env.SHOULD_BUILD == 'true' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+        shell: bash
+        run: |
+          docker push "${{ env.ECR_REGISTRY }}/${{ matrix.ecr_repo }}:${{ env.IMAGE_TAG }}"
+          docker push "${{ env.ECR_REGISTRY }}/${{ matrix.ecr_repo }}:joon-latest"
 
   update-values:
+    name: Update Helm values
     needs:
       - detect-changes
-      - build-and-push
+      - test-build-scan-push
     runs-on: ubuntu-latest
+
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
 
     steps:
       - name: Checkout dev branch
         uses: actions/checkout@v4
         with:
-          ref: dev
+          ref: joon
           token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Set lowercase owner
-        shell: bash
-        run: |
-          echo "OWNER_LOWER=${GITHUB_REPOSITORY_OWNER,,}" >> $GITHUB_ENV
 
       - name: Install yq
         shell: bash
@@ -143,24 +259,21 @@ jobs:
       - name: Update values-dev.yaml image tags
         shell: bash
         run: |
-          if [ "${{ needs.detect-changes.outputs.frontend }}" = "true" ]; then
-            yq -i '.images.frontend.repository = "ghcr.io/${{ env.OWNER_LOWER }}/hotel-frontend"' $VALUES_FILE
-            yq -i '.images.frontend.tag = "${{ env.IMAGE_TAG }}"' $VALUES_FILE
+          yq -i '.global.imageRegistry = "${{ env.ECR_REGISTRY }}"' "$VALUES_FILE"
+
+          if [ "${{ needs.detect-changes.outputs.build_all }}" = "true" ] || [ "${{ needs.detect-changes.outputs.user }}" = "true" ]; then
+            yq -i '.services.user.imageName = "hotel-svc-user"' "$VALUES_FILE"
+            yq -i '.services.user.imageTag = "${{ env.IMAGE_TAG }}"' "$VALUES_FILE"
           fi
 
-          if [ "${{ needs.detect-changes.outputs.user }}" = "true" ]; then
-            yq -i '.images.user.repository = "ghcr.io/${{ env.OWNER_LOWER }}/hotel-user-service"' $VALUES_FILE
-            yq -i '.images.user.tag = "${{ env.IMAGE_TAG }}"' $VALUES_FILE
+          if [ "${{ needs.detect-changes.outputs.build_all }}" = "true" ] || [ "${{ needs.detect-changes.outputs.search }}" = "true" ]; then
+            yq -i '.services.search.imageName = "hotel-svc-search"' "$VALUES_FILE"
+            yq -i '.services.search.imageTag = "${{ env.IMAGE_TAG }}"' "$VALUES_FILE"
           fi
 
-          if [ "${{ needs.detect-changes.outputs.search }}" = "true" ]; then
-            yq -i '.images.search.repository = "ghcr.io/${{ env.OWNER_LOWER }}/hotel-search-service"' $VALUES_FILE
-            yq -i '.images.search.tag = "${{ env.IMAGE_TAG }}"' $VALUES_FILE
-          fi
-
-          if [ "${{ needs.detect-changes.outputs.event }}" = "true" ]; then
-            yq -i '.images.event.repository = "ghcr.io/${{ env.OWNER_LOWER }}/hotel-event-service"' $VALUES_FILE
-            yq -i '.images.event.tag = "${{ env.IMAGE_TAG }}"' $VALUES_FILE
+          if [ "${{ needs.detect-changes.outputs.build_all }}" = "true" ] || [ "${{ needs.detect-changes.outputs.event }}" = "true" ]; then
+            yq -i '.services.event.imageName = "hotel-svc-event"' "$VALUES_FILE"
+            yq -i '.services.event.imageTag = "${{ env.IMAGE_TAG }}"' "$VALUES_FILE"
           fi
 
       - name: Commit and push updated values-dev.yaml
@@ -174,6 +287,44 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-          git add $VALUES_FILE
-          git commit -m "ci: update dev image tags [skip ci]"
-          git push origin dev
+          git add "$VALUES_FILE"
+          git commit -m "ci: update ECR image tags [skip ci]"
+          git push origin joon
+
+  notify-slack:
+    name: Notify Slack
+    needs:
+      - detect-changes
+      - test-build-scan-push
+      - update-values
+    runs-on: ubuntu-latest
+
+    if: always() && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+
+    steps:
+      - name: Notify success
+        if: needs.test-build-scan-push.result == 'success' && needs.update-values.result == 'success'
+        uses: 8398a7/action-slack@v3
+        with:
+          status: success
+          text: |
+            ✅ DEV CI/CD 성공
+            Branch: ${{ github.ref_name }}
+            Commit: ${{ github.sha }}
+            Actor: ${{ github.actor }}
+            Registry: ${{ env.ECR_REGISTRY }}
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+
+      - name: Notify failure
+        if: needs.test-build-scan-push.result == 'failure' || needs.update-values.result == 'failure'
+        uses: 8398a7/action-slack@v3
+        with:
+          status: failure
+          text: |
+            ❌ DEV CI/CD 실패
+            Branch: ${{ github.ref_name }}
+            Commit: ${{ github.sha }}
+            Actor: ${{ github.actor }}
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
