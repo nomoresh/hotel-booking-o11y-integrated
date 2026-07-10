@@ -40,19 +40,19 @@ services:
     enabled: true
     name: hotel-svc-user
     imageName: hotel-svc-user
-    imageTag: "524fdea"
+    imageTag: "ab27e76"
     port: 8083
   search:
     enabled: true
     name: hotel-svc-search
     imageName: hotel-svc-search
-    imageTag: "524fdea"
+    imageTag: "ab27e76"
     port: 8085
   event:
     enabled: true
     name: hotel-svc-event
     imageName: hotel-svc-event
-    imageTag: "524fdea"
+    imageTag: "ab27e76"
     port: 8084
   frontend:
     enabled: true
