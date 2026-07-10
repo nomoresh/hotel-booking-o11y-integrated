@@ -262,20 +262,25 @@ jobs:
 
       - name: Run Trivy vulnerability scan
         if: env.SHOULD_BUILD == 'true'
-        uses: aquasecurity/trivy-action@v0.30.0
+        uses: aquasecurity/trivy-action@v0.35.0
         with:
           image-ref: ${{ env.ECR_REGISTRY }}/${{ matrix.ecr_repo }}:${{ env.IMAGE_TAG }}
           format: table
+          scanners: vuln
           severity: HIGH,CRITICAL
           ignore-unfixed: true
           exit-code: "1"
-      # 추후 sarif 추가해서 보안 강화 
+        # 추후 sarif 보안 강화
 
       - name: Push Docker image to ECR
         if: env.SHOULD_BUILD == 'true' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
         shell: bash
         run: |
-          docker push "${{ env.ECR_REGISTRY }}/${{ matrix.ecr_repo }}:${{ env.IMAGE_TAG }}"
+          docker image inspect \
+            "${{ env.ECR_REGISTRY }}/${{ matrix.ecr_repo }}:${{ env.IMAGE_TAG }}"
+
+          docker push \
+            "${{ env.ECR_REGISTRY }}/${{ matrix.ecr_repo }}:${{ env.IMAGE_TAG }}"
 
   update-values:
     name: Update Helm values
