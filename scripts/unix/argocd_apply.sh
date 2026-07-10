@@ -38,7 +38,7 @@ done
 AUTO_APPROVE="${AUTO_APPROVE:-false}"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 TERRAFORM_DIR="$PROJECT_ROOT/infra/terraform/eks"
 PORT_FORWARD_SCRIPT="$PROJECT_ROOT/scripts/unix/argocd_port.sh"
 
