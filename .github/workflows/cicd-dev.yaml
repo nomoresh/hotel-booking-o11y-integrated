@@ -24,7 +24,7 @@ on:
   workflow_dispatch:
     inputs:
       build_all:
-        description: "Build all backend services"
+        description: "Build all services"
         required: true
         default: "false"
         type: choice
