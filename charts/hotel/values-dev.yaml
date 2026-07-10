@@ -58,7 +58,7 @@ services:
     enabled: true
     name: hotel-frontend
     imageName: hotel-frontend
-    imageTag: 4a0cf6b
+    imageTag: "4a0cf6b"
     port: 3000
     probes:
       enabled: true

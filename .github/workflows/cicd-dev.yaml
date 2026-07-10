@@ -9,7 +9,6 @@ on:
       - "apps/search-service/**"
       - "apps/event-service/**"
       - "apps/hotel-frontend/**"
-      - "charts/hotel/values-dev.yaml"
       - ".github/workflows/cicd-dev.yaml"
 
   pull_request:
@@ -20,7 +19,6 @@ on:
       - "apps/search-service/**"
       - "apps/event-service/**"
       - "apps/hotel-frontend/**"
-      - "charts/hotel/values-dev.yaml"
       - ".github/workflows/cicd-dev.yaml"
 
   workflow_dispatch:
@@ -28,11 +26,11 @@ on:
       build_all:
         description: "Build all backend services"
         required: true
-        default: "true"
+        default: "false"
         type: choice
         options:
-          - "true"
           - "false"
+          - "true"
 
 permissions:
   contents: write
@@ -315,22 +313,26 @@ jobs:
         run: |
           yq -i '.global.imageRegistry = "${{ env.ECR_REGISTRY }}"' "$VALUES_FILE"
 
-          if [ "${{ needs.detect-changes.outputs.build_all }}" = "true" ] || [ "${{ needs.detect-changes.outputs.user }}" = "true" ]; then
+          if [ "${{ needs.detect-changes.outputs.build_all }}" = "true" ] || \
+             [ "${{ needs.detect-changes.outputs.user }}" = "true" ]; then
             yq -i '.services.user.imageName = "hotel-svc-user"' "$VALUES_FILE"
             yq -i '.services.user.imageTag = "${{ env.IMAGE_TAG }}"' "$VALUES_FILE"
           fi
 
-          if [ "${{ needs.detect-changes.outputs.build_all }}" = "true" ] || [ "${{ needs.detect-changes.outputs.search }}" = "true" ]; then
+          if [ "${{ needs.detect-changes.outputs.build_all }}" = "true" ] || \
+             [ "${{ needs.detect-changes.outputs.search }}" = "true" ]; then
             yq -i '.services.search.imageName = "hotel-svc-search"' "$VALUES_FILE"
             yq -i '.services.search.imageTag = "${{ env.IMAGE_TAG }}"' "$VALUES_FILE"
           fi
 
-          if [ "${{ needs.detect-changes.outputs.build_all }}" = "true" ] || [ "${{ needs.detect-changes.outputs.event }}" = "true" ]; then
+          if [ "${{ needs.detect-changes.outputs.build_all }}" = "true" ] || \
+             [ "${{ needs.detect-changes.outputs.event }}" = "true" ]; then
             yq -i '.services.event.imageName = "hotel-svc-event"' "$VALUES_FILE"
             yq -i '.services.event.imageTag = "${{ env.IMAGE_TAG }}"' "$VALUES_FILE"
           fi
 
-          if [ "${{ needs.detect-changes.outputs.build_all }}" = "true" ] || [ "${{ needs.detect-changes.outputs.frontend }}" = "true" ]; then
+          if [ "${{ needs.detect-changes.outputs.build_all }}" = "true" ] || \
+             [ "${{ needs.detect-changes.outputs.frontend }}" = "true" ]; then
             yq -i '.services.frontend.imageName = "hotel-frontend"' "$VALUES_FILE"
             yq -i '.services.frontend.imageTag = "${{ env.IMAGE_TAG }}"' "$VALUES_FILE"
           fi
