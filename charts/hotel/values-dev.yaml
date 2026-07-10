@@ -40,43 +40,38 @@ services:
     enabled: true
     name: hotel-svc-user
     imageName: hotel-svc-user
-    imageTag: 14185d0
+    imageTag: 320d31c
     port: 8083
   search:
     enabled: true
     name: hotel-svc-search
     imageName: hotel-svc-search
-    imageTag: 14185d0
+    imageTag: 320d31c
     port: 8085
   event:
     enabled: true
     name: hotel-svc-event
     imageName: hotel-svc-event
-    imageTag: 14185d0
+    imageTag: 320d31c
     port: 8084
-
 ingress:
   enabled: true
   className: alb
-
   annotations:
     alb.ingress.kubernetes.io/scheme: internet-facing
     alb.ingress.kubernetes.io/target-type: ip
     alb.ingress.kubernetes.io/listen-ports: '[{"HTTP":80}]'
     alb.ingress.kubernetes.io/healthcheck-path: /actuator/health
     alb.ingress.kubernetes.io/success-codes: "200"
-
   rules:
     - path: /users
       pathType: Prefix
       serviceName: hotel-svc-user
       servicePort: 8083
-
     - path: /search
       pathType: Prefix
       serviceName: hotel-svc-search
       servicePort: 8085
-
     - path: /events
       pathType: Prefix
       serviceName: hotel-svc-event
