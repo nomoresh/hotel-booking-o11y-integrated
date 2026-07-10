@@ -33,11 +33,13 @@ on:
           - "true"
 
 permissions:
-  contents: write
+  contents: read
+  pull-requests: read
 
 concurrency:
-  group: cicd-dev
-  cancel-in-progress: true
+  group: cicd-dev-${{ github.ref }}
+  cancel-in-progress: false
+  queue: max
 
 env:
   AWS_REGION: ap-northeast-2
@@ -56,6 +58,8 @@ jobs:
       event: ${{ steps.filter.outputs.event }}
       frontend: ${{ steps.filter.outputs.frontend }}
       build_all: ${{ steps.build_all.outputs.value }}
+      matrix: ${{ steps.matrix.outputs.matrix }}
+      has_changes: ${{ steps.matrix.outputs.has_changes }}
 
     steps:
       - name: Checkout
@@ -63,8 +67,9 @@ jobs:
 
       - name: Detect changed services
         id: filter
-        uses: dorny/paths-filter@v3
+        uses: dorny/paths-filter@v4
         with:
+          base: ${{ github.ref }}
           filters: |
             user:
               - 'apps/user-service/**'
@@ -84,10 +89,95 @@ jobs:
           else
             echo "value=false" >> "$GITHUB_OUTPUT"
           fi
+          
+      - name: Create changed service matrix
+        id: matrix
+        shell: bash
+        env:
+          BUILD_ALL: ${{ steps.build_all.outputs.value }}
+          USER_CHANGED: ${{ steps.filter.outputs.user }}
+          SEARCH_CHANGED: ${{ steps.filter.outputs.search }}
+          EVENT_CHANGED: ${{ steps.filter.outputs.event }}
+          FRONTEND_CHANGED: ${{ steps.filter.outputs.frontend }}
+        run: |
+          python - <<'PY'
+          import json
+          import os
+
+          build_all = os.environ["BUILD_ALL"] == "true"
+
+          services = [
+              {
+                  "service_key": "user",
+                  "service_name": "user-service",
+                  "context": "apps/user-service",
+                  "ecr_repo": "hotel-svc-user",
+                  "values_key": "user",
+                  "changed_output": "user",
+                  "service_type": "backend",
+                  "changed": os.environ["USER_CHANGED"] == "true",
+              },
+              {
+                  "service_key": "search",
+                  "service_name": "search-service",
+                  "context": "apps/search-service",
+                  "ecr_repo": "hotel-svc-search",
+                  "values_key": "search",
+                  "changed_output": "search",
+                  "service_type": "backend",
+                  "changed": os.environ["SEARCH_CHANGED"] == "true",
+              },
+              {
+                  "service_key": "event",
+                  "service_name": "event-service",
+                  "context": "apps/event-service",
+                  "ecr_repo": "hotel-svc-event",
+                  "values_key": "event",
+                  "changed_output": "event",
+                  "service_type": "backend",
+                  "changed": os.environ["EVENT_CHANGED"] == "true",
+              },
+              {
+                  "service_key": "frontend",
+                  "service_name": "hotel-frontend",
+                  "context": "apps/hotel-frontend",
+                  "ecr_repo": "hotel-frontend",
+                  "values_key": "frontend",
+                  "changed_output": "frontend",
+                  "service_type": "frontend",
+                  "changed": os.environ["FRONTEND_CHANGED"] == "true",
+              },
+          ]
+
+          include = []
+
+          for service in services:
+              if build_all or service["changed"]:
+                  service.pop("changed")
+                  include.append(service)
+
+          matrix = {
+              "include": include
+          }
+
+          has_changes = "true" if include else "false"
+
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
+              output.write(
+                  f"matrix={json.dumps(matrix, separators=(',', ':'))}\n"
+              )
+              output.write(f"has_changes={has_changes}\n")
+
+          print("Generated matrix:")
+          print(json.dumps(matrix, indent=2))
+          PY
 
   test-build-scan-push:
     name: Test, build, scan and push
     needs: detect-changes
+
+    if: needs.detect-changes.outputs.has_changes == 'true'
+
     runs-on: ubuntu-latest
 
     services:
@@ -96,7 +186,7 @@ jobs:
         env:
           POSTGRES_DB: hoteldb
           POSTGRES_USER: hotel
-          POSTGRES_PASSWORD: hotel1234
+          POSTGRES_PASSWORD: ${{ secrets.DEV_POSTGRES_PASSWORD }}
         ports:
           - 5433:5432
         options: >-
@@ -117,90 +207,19 @@ jobs:
 
     strategy:
       fail-fast: false
-      matrix:
-        include:
-          - service_key: user
-            service_name: user-service
-            context: apps/user-service
-            ecr_repo: hotel-svc-user
-            values_key: user
-            changed_output: user
-            service_type: backend
-
-          - service_key: search
-            service_name: search-service
-            context: apps/search-service
-            ecr_repo: hotel-svc-search
-            values_key: search
-            changed_output: search
-            service_type: backend
-
-          - service_key: event
-            service_name: event-service
-            context: apps/event-service
-            ecr_repo: hotel-svc-event
-            values_key: event
-            changed_output: event
-            service_type: backend
-
-          - service_key: frontend
-            service_name: hotel-frontend
-            context: apps/hotel-frontend
-            ecr_repo: hotel-frontend
-            values_key: frontend
-            changed_output: frontend
-            service_type: frontend
+      matrix: ${{ fromJSON(needs.detect-changes.outputs.matrix) }}
 
     steps:
       - name: Checkout dev branch
         uses: actions/checkout@v4
 
-      - name: Decide whether to build this service
-        id: should_build
-        shell: bash
-        run: |
-          SHOULD_BUILD="false"
-
-          if [ "${{ needs.detect-changes.outputs.build_all }}" = "true" ]; then
-            SHOULD_BUILD="true"
-          fi
-
-          if [ "${{ matrix.service_key }}" = "user" ] && \
-             [ "${{ needs.detect-changes.outputs.user }}" = "true" ]; then
-            SHOULD_BUILD="true"
-          fi
-
-          if [ "${{ matrix.service_key }}" = "search" ] && \
-             [ "${{ needs.detect-changes.outputs.search }}" = "true" ]; then
-            SHOULD_BUILD="true"
-          fi
-
-          if [ "${{ matrix.service_key }}" = "event" ] && \
-             [ "${{ needs.detect-changes.outputs.event }}" = "true" ]; then
-            SHOULD_BUILD="true"
-          fi
-
-          if [ "${{ matrix.service_key }}" = "frontend" ] && \
-             [ "${{ needs.detect-changes.outputs.frontend }}" = "true" ]; then
-            SHOULD_BUILD="true"
-          fi
-
-          echo "value=$SHOULD_BUILD" >> "$GITHUB_OUTPUT"
-          echo "SHOULD_BUILD=$SHOULD_BUILD" >> "$GITHUB_ENV"
-
       - name: Set short image tag
-        if: env.SHOULD_BUILD == 'true'
         shell: bash
         run: |
           echo "IMAGE_TAG=${GITHUB_SHA::7}" >> "$GITHUB_ENV"
 
-      - name: Skip unchanged service
-        if: env.SHOULD_BUILD != 'true'
-        run: |
-          echo "${{ matrix.service_name }} was not changed. Skipping."
-
       - name: Set up JDK 21
-        if: env.SHOULD_BUILD == 'true' && matrix.service_type == 'backend'
+        if: matrix.service_type == 'backend'
         uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -208,15 +227,21 @@ jobs:
           cache: gradle
 
       - name: Run backend unit tests
-        if: env.SHOULD_BUILD == 'true' && matrix.service_type == 'backend'
+        if: matrix.service_type == 'backend'
         working-directory: ${{ matrix.context }}
         shell: bash
+        env:
+          SPRING_DATASOURCE_URL: jdbc:postgresql://localhost:5433/hoteldb
+          SPRING_DATASOURCE_USERNAME: hotel
+          SPRING_DATASOURCE_PASSWORD: ${{ secrets.DEV_POSTGRES_PASSWORD }}
+          SPRING_DATA_REDIS_HOST: localhost
+          SPRING_DATA_REDIS_PORT: "6379"
         run: |
           chmod +x ./gradlew
           ./gradlew test --no-daemon
 
       - name: Set up Node.js
-        if: env.SHOULD_BUILD == 'true' && matrix.service_type == 'frontend'
+        if: matrix.service_type == 'frontend'
         uses: actions/setup-node@v4
         with:
           node-version: "20"
@@ -224,7 +249,7 @@ jobs:
           cache-dependency-path: ${{ matrix.context }}/package-lock.json
 
       - name: Build frontend
-        if: env.SHOULD_BUILD == 'true' && matrix.service_type == 'frontend'
+        if: matrix.service_type == 'frontend'
         working-directory: ${{ matrix.context }}
         shell: bash
         run: |
@@ -232,7 +257,7 @@ jobs:
           npm run build
 
       - name: Configure AWS credentials
-        if: env.SHOULD_BUILD == 'true' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+        if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
         uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
@@ -240,15 +265,13 @@ jobs:
           aws-region: ${{ env.AWS_REGION }}
 
       - name: Login to Amazon ECR
-        if: env.SHOULD_BUILD == 'true' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+        if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
         uses: aws-actions/amazon-ecr-login@v2
 
       - name: Set up Docker Buildx
-        if: env.SHOULD_BUILD == 'true'
         uses: docker/setup-buildx-action@v3
 
       - name: Build Docker image locally
-        if: env.SHOULD_BUILD == 'true'
         uses: docker/build-push-action@v6
         with:
           context: ./${{ matrix.context }}
@@ -259,7 +282,6 @@ jobs:
             ${{ env.ECR_REGISTRY }}/${{ matrix.ecr_repo }}:${{ env.IMAGE_TAG }}
 
       - name: Run Trivy vulnerability scan
-        if: env.SHOULD_BUILD == 'true'
         uses: aquasecurity/trivy-action@v0.35.0
         with:
           image-ref: ${{ env.ECR_REGISTRY }}/${{ matrix.ecr_repo }}:${{ env.IMAGE_TAG }}
@@ -271,7 +293,7 @@ jobs:
         # 추후 sarif 보안 강화
 
       - name: Push Docker image to ECR
-        if: env.SHOULD_BUILD == 'true' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+        if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
         shell: bash
         run: |
           docker image inspect \
@@ -282,12 +304,16 @@ jobs:
 
   update-values:
     name: Update Helm values
+    permissions:
+      contents: write
     needs:
       - detect-changes
       - test-build-scan-push
     runs-on: ubuntu-latest
 
-    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    if: > 
+      needs.detect-changes.outputs.has_changes == 'true' &&
+      (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
 
     steps:
       - name: Checkout dev branch
@@ -378,7 +404,13 @@ jobs:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
 
       - name: Notify failure
-        if: needs.test-build-scan-push.result == 'failure' || needs.update-values.result == 'failure'
+        if: >
+          needs.detect-changes.result == 'failure' ||
+          needs.test-build-scan-push.result == 'failure' ||
+          needs.update-values.result == 'failure' ||
+          needs.detect-changes.result == 'cancelled' ||
+          needs.test-build-scan-push.result == 'cancelled' ||
+          needs.update-values.result == 'cancelled'
         uses: 8398a7/action-slack@v3
         with:
           status: failure
