@@ -8,6 +8,7 @@ on:
       - "apps/user-service/**"
       - "apps/search-service/**"
       - "apps/event-service/**"
+      - "apps/hotel-frontend/**"
       - "charts/hotel/values-dev.yaml"
       - ".github/workflows/cicd-dev.yaml"
 
@@ -18,6 +19,7 @@ on:
       - "apps/user-service/**"
       - "apps/search-service/**"
       - "apps/event-service/**"
+      - "apps/hotel-frontend/**"
       - "charts/hotel/values-dev.yaml"
       - ".github/workflows/cicd-dev.yaml"
 
@@ -54,6 +56,7 @@ jobs:
       user: ${{ steps.filter.outputs.user }}
       search: ${{ steps.filter.outputs.search }}
       event: ${{ steps.filter.outputs.event }}
+      frontend: ${{ steps.filter.outputs.frontend }}
       build_all: ${{ steps.build_all.outputs.value }}
 
     steps:
@@ -71,6 +74,8 @@ jobs:
               - 'apps/search-service/**'
             event:
               - 'apps/event-service/**'
+            frontend:
+              - 'apps/hotel-frontend/**'
 
       - name: Resolve build_all option
         id: build_all
@@ -122,6 +127,7 @@ jobs:
             ecr_repo: hotel-svc-user
             values_key: user
             changed_output: user
+            service_type: backend
 
           - service_key: search
             service_name: search-service
@@ -129,6 +135,7 @@ jobs:
             ecr_repo: hotel-svc-search
             values_key: search
             changed_output: search
+            service_type: backend
 
           - service_key: event
             service_name: event-service
@@ -136,6 +143,15 @@ jobs:
             ecr_repo: hotel-svc-event
             values_key: event
             changed_output: event
+            service_type: backend
+
+          - service_key: frontend
+            service_name: hotel-frontend
+            context: apps/hotel-frontend
+            ecr_repo: hotel-frontend
+            values_key: frontend
+            changed_output: frontend
+            service_type: frontend
 
     steps:
       - name: Checkout dev branch
@@ -151,20 +167,29 @@ jobs:
             SHOULD_BUILD="true"
           fi
 
-          if [ "${{ matrix.service_key }}" = "user" ] && [ "${{ needs.detect-changes.outputs.user }}" = "true" ]; then
+          if [ "${{ matrix.service_key }}" = "user" ] && \
+             [ "${{ needs.detect-changes.outputs.user }}" = "true" ]; then
             SHOULD_BUILD="true"
           fi
 
-          if [ "${{ matrix.service_key }}" = "search" ] && [ "${{ needs.detect-changes.outputs.search }}" = "true" ]; then
+          if [ "${{ matrix.service_key }}" = "search" ] && \
+             [ "${{ needs.detect-changes.outputs.search }}" = "true" ]; then
             SHOULD_BUILD="true"
           fi
 
-          if [ "${{ matrix.service_key }}" = "event" ] && [ "${{ needs.detect-changes.outputs.event }}" = "true" ]; then
+          if [ "${{ matrix.service_key }}" = "event" ] && \
+             [ "${{ needs.detect-changes.outputs.event }}" = "true" ]; then
+            SHOULD_BUILD="true"
+          fi
+
+          if [ "${{ matrix.service_key }}" = "frontend" ] && \
+             [ "${{ needs.detect-changes.outputs.frontend }}" = "true" ]; then
             SHOULD_BUILD="true"
           fi
 
           echo "value=$SHOULD_BUILD" >> "$GITHUB_OUTPUT"
           echo "SHOULD_BUILD=$SHOULD_BUILD" >> "$GITHUB_ENV"
+
       - name: Set short image tag
         if: env.SHOULD_BUILD == 'true'
         shell: bash
@@ -177,20 +202,36 @@ jobs:
           echo "${{ matrix.service_name }} was not changed. Skipping."
 
       - name: Set up JDK 21
-        if: env.SHOULD_BUILD == 'true'
+        if: env.SHOULD_BUILD == 'true' && matrix.service_type == 'backend'
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: "21"
           cache: gradle
 
-      - name: Run unit tests
-        if: env.SHOULD_BUILD == 'true'
+      - name: Run backend unit tests
+        if: env.SHOULD_BUILD == 'true' && matrix.service_type == 'backend'
         working-directory: ${{ matrix.context }}
         shell: bash
         run: |
           chmod +x ./gradlew
           ./gradlew test --no-daemon
+
+      - name: Set up Node.js
+        if: env.SHOULD_BUILD == 'true' && matrix.service_type == 'frontend'
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: ${{ matrix.context }}/package-lock.json
+
+      - name: Build frontend
+        if: env.SHOULD_BUILD == 'true' && matrix.service_type == 'frontend'
+        working-directory: ${{ matrix.context }}
+        shell: bash
+        run: |
+          npm ci
+          npm run build
 
       - name: Configure AWS credentials
         if: env.SHOULD_BUILD == 'true' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
@@ -213,6 +254,7 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: ./${{ matrix.context }}
+          platforms: linux/amd64
           push: false
           load: true
           tags: |
@@ -281,6 +323,11 @@ jobs:
           if [ "${{ needs.detect-changes.outputs.build_all }}" = "true" ] || [ "${{ needs.detect-changes.outputs.event }}" = "true" ]; then
             yq -i '.services.event.imageName = "hotel-svc-event"' "$VALUES_FILE"
             yq -i '.services.event.imageTag = "${{ env.IMAGE_TAG }}"' "$VALUES_FILE"
+          fi
+
+          if [ "${{ needs.detect-changes.outputs.build_all }}" = "true" ] || [ "${{ needs.detect-changes.outputs.frontend }}" = "true" ]; then
+            yq -i '.services.frontend.imageName = "hotel-frontend"' "$VALUES_FILE"
+            yq -i '.services.frontend.imageTag = "${{ env.IMAGE_TAG }}"' "$VALUES_FILE"
           fi
 
       - name: Commit and push updated values-dev.yaml
