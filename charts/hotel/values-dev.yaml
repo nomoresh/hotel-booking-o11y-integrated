@@ -54,3 +54,30 @@ services:
     imageName: hotel-svc-event
     imageTag: 14185d0
     port: 8084
+
+ingress:
+  enabled: true
+  className: alb
+
+  annotations:
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    alb.ingress.kubernetes.io/target-type: ip
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTP":80}]'
+    alb.ingress.kubernetes.io/healthcheck-path: /actuator/health
+    alb.ingress.kubernetes.io/success-codes: "200"
+
+  rules:
+    - path: /users
+      pathType: Prefix
+      serviceName: hotel-svc-user
+      servicePort: 8083
+
+    - path: /search
+      pathType: Prefix
+      serviceName: hotel-svc-search
+      servicePort: 8085
+
+    - path: /events
+      pathType: Prefix
+      serviceName: hotel-svc-event
+      servicePort: 8084
