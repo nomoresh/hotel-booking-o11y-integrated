@@ -22,6 +22,8 @@ COPY . .
 
 RUN npm run build
 
+RUN mkdir -p public
+
 
 FROM node:22-alpine AS runner
 
@@ -35,7 +37,19 @@ ENV HOSTNAME=0.0.0.0
 RUN addgroup --system --gid 1001 nodejs && \
     adduser --system --uid 1001 nextjs
 
-COPY --from=builder /app/public ./public
+# 실행에는 node만 필요하므로 npm, npx, corepack, yarn 제거
+RUN rm -rf \
+      /usr/local/lib/node_modules/npm \
+      /usr/local/lib/node_modules/corepack \
+      /usr/local/bin/npm \
+      /usr/local/bin/npx \
+      /usr/local/bin/corepack \
+      /usr/local/bin/yarn \
+      /usr/local/bin/yarnpkg \
+      /opt/yarn-v*
+
+COPY --from=builder --chown=nextjs:nodejs \
+  /app/public ./public
 
 COPY --from=builder --chown=nextjs:nodejs \
   /app/.next/standalone ./
