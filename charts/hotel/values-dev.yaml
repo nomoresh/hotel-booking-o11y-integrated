@@ -2,21 +2,17 @@ global:
   namespace: dev
   imageRegistry: 074467724762.dkr.ecr.ap-northeast-2.amazonaws.com
   imagePullPolicy: Always
-
 database:
   host: hotel-postgres
   port: 5432
   name: hoteldb
   username: hotel
   secretName: hotel-db-secret
-
 redis:
   host: hotel-redis
   port: 6379
-
 serviceDefaults:
   replicas: 1
-
   resources:
     requests:
       cpu: 100m
@@ -36,29 +32,25 @@ serviceDefaults:
     minReplicas: 1
     maxReplicas: 3
     targetCPUUtilizationPercentage: 70
-
   rollingUpdate:
     maxSurge: 1
     maxUnavailable: 0
-
 services:
   user:
     enabled: true
     name: hotel-svc-user
     imageName: hotel-svc-user
-    imageTag: 587a6d9
+    imageTag: 14185d0
     port: 8083
-
   search:
     enabled: true
     name: hotel-svc-search
     imageName: hotel-svc-search
-    imageTag: 587a6d9
+    imageTag: 14185d0
     port: 8085
-
   event:
     enabled: true
     name: hotel-svc-event
     imageName: hotel-svc-event
-    imageTag: 587a6d9
+    imageTag: 14185d0
     port: 8084
