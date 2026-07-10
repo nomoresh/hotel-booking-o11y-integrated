@@ -54,8 +54,6 @@ services:
     imageName: hotel-svc-event
     imageTag: 320d31c
     port: 8084
-<<<<<<< Updated upstream
-=======
   frontend:
     enabled: true
     name: hotel-frontend
@@ -71,7 +69,6 @@ services:
       timeoutSeconds: 3
       failureThreshold: 3
 
->>>>>>> Stashed changes
 ingress:
   enabled: true
   className: alb
@@ -79,14 +76,9 @@ ingress:
     alb.ingress.kubernetes.io/scheme: internet-facing
     alb.ingress.kubernetes.io/target-type: ip
     alb.ingress.kubernetes.io/listen-ports: '[{"HTTP":80}]'
-<<<<<<< Updated upstream
-    alb.ingress.kubernetes.io/healthcheck-path: /actuator/health
-    alb.ingress.kubernetes.io/success-codes: "200"
-=======
     alb.ingress.kubernetes.io/healthcheck-path: /
     alb.ingress.kubernetes.io/success-codes: "200,302,404"
 
->>>>>>> Stashed changes
   rules:
     - path: /
       pathType: Prefix
@@ -97,10 +89,12 @@ ingress:
       pathType: Prefix
       serviceName: hotel-svc-user
       servicePort: 8083
+
     - path: /search
       pathType: Prefix
       serviceName: hotel-svc-search
       servicePort: 8085
+    
     - path: /events
       pathType: Prefix
       serviceName: hotel-svc-event
