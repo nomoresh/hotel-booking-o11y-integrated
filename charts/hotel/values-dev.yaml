@@ -12,7 +12,10 @@ redis:
   host: hotel-redis
   port: 6379
 serviceDefaults:
+  appType: backend
   replicas: 1
+  revisionHistoryLimit: 2
+
   resources:
     requests:
       cpu: 100m
@@ -20,6 +23,7 @@ serviceDefaults:
     limits:
       cpu: 500m
       memory: 512Mi
+
   probes:
     enabled: true
     path: /actuator/health
@@ -32,9 +36,11 @@ serviceDefaults:
     minReplicas: 1
     maxReplicas: 3
     targetCPUUtilizationPercentage: 70
+    
   rollingUpdate:
     maxSurge: 1
     maxUnavailable: 0
+
 services:
   user:
     enabled: true
@@ -56,6 +62,7 @@ services:
     port: 8084
   frontend:
     enabled: true
+    appType: frontend
     name: hotel-frontend
     imageName: hotel-frontend
     imageTag: "524fdea"

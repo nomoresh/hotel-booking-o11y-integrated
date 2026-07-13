@@ -1,6 +1,6 @@
 {{- range $key, $svc := .Values.services }}
 {{- if $svc.enabled }}
-{{- $config := deepCopy $.Values.serviceDefaults | mergeOverwrite $svc }}
+{{- $config := mergeOverwrite (deepCopy $.Values.serviceDefaults) $svc }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -9,46 +9,61 @@ metadata:
   labels:
     app: {{ $config.name }}
 spec:
+{{- if not $config.hpa.enabled }}
   replicas: {{ $config.replicas }}
+{{- end }}
+  revisionHistoryLimit: {{ default 2 $config.revisionHistoryLimit }}
+
   strategy:
     type: RollingUpdate
     rollingUpdate:
       maxSurge: {{ $config.rollingUpdate.maxSurge }}
       maxUnavailable: {{ $config.rollingUpdate.maxUnavailable }}
+
   selector:
     matchLabels:
       app: {{ $config.name }}
+
   template:
     metadata:
       labels:
         app: {{ $config.name }}
+
     spec:
       containers:
         - name: {{ $config.name }}
           image: "{{ $.Values.global.imageRegistry }}/{{ $config.imageName }}:{{ $config.imageTag }}"
           imagePullPolicy: {{ $.Values.global.imagePullPolicy }}
-          ports:
-            - containerPort: {{ $config.port }}
 
+          ports:
+            - name: http
+              containerPort: {{ $config.port }}
+
+{{ if ne $config.appType "frontend" }}
           env:
             - name: SPRING_DATASOURCE_URL
               value: "jdbc:postgresql://{{ $.Values.database.host }}:{{ $.Values.database.port }}/{{ $.Values.database.name }}"
+
             - name: SPRING_DATASOURCE_USERNAME
               value: "{{ $.Values.database.username }}"
+
             - name: SPRING_DATASOURCE_PASSWORD
               valueFrom:
                 secretKeyRef:
                   name: {{ $.Values.database.secretName }}
                   key: password
+
             - name: SPRING_DATA_REDIS_HOST
               value: "{{ $.Values.redis.host }}"
+
             - name: SPRING_DATA_REDIS_PORT
               value: "{{ $.Values.redis.port }}"
+{{ end }}
 
           resources:
 {{- toYaml $config.resources | nindent 12 }}
 
-          {{- if $config.probes.enabled }}
+{{ if $config.probes.enabled }}
           readinessProbe:
             httpGet:
               path: {{ $config.probes.path }}
@@ -66,7 +81,7 @@ spec:
             periodSeconds: {{ $config.probes.periodSeconds }}
             timeoutSeconds: {{ $config.probes.timeoutSeconds }}
             failureThreshold: {{ $config.probes.failureThreshold }}
-          {{- end }}
+{{ end }}
 ---
 {{- end }}
 {{- end }}
