@@ -24,7 +24,8 @@ jwt:
 
 search-service:
   # 결제 금액 검증을 위해 호텔 basePrice를 조회하는 대상
-  base-url: http://localhost:8085
+  # base-url: http://localhost:8085
+  base-url: ${SEARCH_SERVICE_BASE_URL:http://localhost:8085}
 
 management:
   endpoints:

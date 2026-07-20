@@ -39,7 +39,6 @@ permissions:
 concurrency:
   group: cicd-dev-${{ github.ref }}
   cancel-in-progress: false
-  queue: max
 
 env:
   AWS_REGION: ap-northeast-2
@@ -69,7 +68,6 @@ jobs:
         id: filter
         uses: dorny/paths-filter@v4
         with:
-          base: ${{ github.ref }}
           filters: |
             user:
               - 'apps/user-service/**'

@@ -58,8 +58,13 @@ spec:
 
             - name: SPRING_DATA_REDIS_PORT
               value: "{{ $.Values.redis.port }}"
+{{- with $config.env }}
+{{- range $envName, $envValue := . }}
+            - name: {{ $envName }}
+              value: {{ $envValue | quote }}
+{{- end }}
+{{- end }}
 {{ end }}
-
           resources:
 {{- toYaml $config.resources | nindent 12 }}
 

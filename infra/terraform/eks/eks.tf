@@ -47,7 +47,7 @@ module "eks" {
   }
 
   # 현재는 서비스 계정용 IAM 연동을 사용하지 않음
-  enable_irsa = false
+  enable_irsa = true
 
   # terraform destroy 허용
   deletion_protection = false

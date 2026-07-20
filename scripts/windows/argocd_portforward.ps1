@@ -15,6 +15,22 @@ function Test-CommandExists {
   }
 }
 
+function Invoke-NativeCommand {
+  param(
+    [Parameter(Mandatory = $true)]
+    [scriptblock]$Command,
+
+    [Parameter(Mandatory = $true)]
+    [string]$ErrorMessage
+  )
+
+  & $Command
+
+  if ($LASTEXITCODE -ne 0) {
+    throw "$ErrorMessage Exit code: $LASTEXITCODE"
+  }
+}
+
 $ScriptDir = $PSScriptRoot
 $ProjectRoot = (Resolve-Path (Join-Path $ScriptDir "..\..")).Path
 $LogDir = Join-Path $ProjectRoot "logs"
@@ -28,8 +44,11 @@ Start-Transcript -Path $LogFile -Append | Out-Null
 
 try {
   Write-Host ""
-  Write-Host "=== Argo CD Port Forward Automation ==="
+  Write-Host "=== Argo CD Port Forward ==="
   Write-Host ""
+  Write-Host "Cluster: $ClusterName"
+  Write-Host "Region: $Region"
+  Write-Host "Profile: $Profile"
   Write-Host "Log file: $LogFile"
   Write-Host ""
 
@@ -37,38 +56,64 @@ try {
   Test-CommandExists "kubectl"
 
   Write-Host "[1/5] Updating kubeconfig..."
-  aws eks update-kubeconfig `
-    --region $Region `
-    --name $ClusterName `
-    --profile $Profile
+
+  Invoke-NativeCommand `
+    -Command {
+      aws eks update-kubeconfig `
+        --region $Region `
+        --name $ClusterName `
+        --profile $Profile
+    } `
+    -ErrorMessage "Failed to update kubeconfig."
 
   Write-Host ""
   Write-Host "[2/5] Checking Kubernetes connection..."
-  kubectl get nodes | Out-Null
+
+  Invoke-NativeCommand `
+    -Command {
+      kubectl get nodes --request-timeout=15s
+    } `
+    -ErrorMessage "Cannot connect to the EKS cluster."
 
   Write-Host ""
   Write-Host "[3/5] Checking Argo CD server..."
-  kubectl get ns argocd | Out-Null
-  kubectl rollout status deploy/argocd-server -n argocd --timeout=180s
+
+  Invoke-NativeCommand `
+    -Command {
+      kubectl get namespace argocd
+    } `
+    -ErrorMessage "Argo CD namespace does not exist."
+
+  Invoke-NativeCommand `
+    -Command {
+      kubectl rollout status `
+        deployment/argocd-server `
+        -n argocd `
+        --timeout=300s
+    } `
+    -ErrorMessage "Argo CD server is not ready."
 
   Write-Host ""
   Write-Host "[4/5] Checking admin password..."
 
-  try {
-    $ARGO_PASS_B64 = kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.password}" 2>$null
+  $ArgoPasswordBase64 = kubectl `
+    -n argocd `
+    get secret argocd-initial-admin-secret `
+    -o jsonpath="{.data.password}" 2>$null
 
-    if ($ARGO_PASS_B64) {
-      $ARGO_PASS = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String($ARGO_PASS_B64))
+  if ($LASTEXITCODE -eq 0 -and $ArgoPasswordBase64) {
+    $ArgoPassword = [System.Text.Encoding]::UTF8.GetString(
+      [System.Convert]::FromBase64String($ArgoPasswordBase64)
+    )
 
-      Write-Host ""
-      Write-Host "Argo CD Login"
-      Write-Host "ID: admin"
-      Write-Host "PW: $ARGO_PASS"
-    } else {
-      Write-Host "Initial admin password secret not found. It may have been changed or deleted."
-    }
-  } catch {
-    Write-Host "Could not read initial admin password. It may have been changed or deleted."
+    Write-Host ""
+    Write-Host "Argo CD Login"
+    Write-Host "ID: admin"
+    Write-Host "PW: $ArgoPassword"
+  }
+  else {
+    Write-Host "Initial admin password secret was not found."
+    Write-Host "The password may already have been changed."
   }
 
   Write-Host ""
@@ -76,31 +121,38 @@ try {
 
   $Url = "http://127.0.0.1:$Port"
 
-  $PortInUse = Get-NetTCPConnection -LocalPort $Port -ErrorAction SilentlyContinue
+  $PortInUse = Get-NetTCPConnection `
+    -LocalPort $Port `
+    -ErrorAction SilentlyContinue
 
   if ($PortInUse) {
-    Write-Host ""
     Write-Host "Port $Port is already in use."
-    Write-Host "Opening existing URL:"
-    Write-Host $Url
+    Write-Host "Opening existing URL: $Url"
+
     Start-Process $Url
     return
   }
 
-  Write-Host ""
-  Write-Host "Argo CD URL:"
-  Write-Host $Url
-  Write-Host ""
-  Write-Host "Press Ctrl + C to stop port-forward."
-  Write-Host ""
-
   Start-Job -ScriptBlock {
     param([string]$OpenUrl)
+
     Start-Sleep -Seconds 3
     Start-Process $OpenUrl
   } -ArgumentList $Url | Out-Null
 
-  kubectl port-forward deploy/argocd-server -n argocd ${Port}:8080
+  Write-Host ""
+  Write-Host "Argo CD URL: $Url"
+  Write-Host "Press Ctrl + C to stop port-forward."
+  Write-Host ""
+
+  kubectl port-forward `
+    deployment/argocd-server `
+    -n argocd `
+    "${Port}:8080"
+
+  if ($LASTEXITCODE -ne 0) {
+    throw "Argo CD port-forward failed."
+  }
 }
 catch {
   Write-Host ""
@@ -110,6 +162,7 @@ catch {
   Write-Host "Check log file:"
   Write-Host $LogFile
   Write-Host ""
+
   exit 1
 }
 finally {
