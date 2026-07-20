@@ -384,7 +384,7 @@ jobs:
       - update-values
     runs-on: ubuntu-latest
 
-    if: always() && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    if: ${{ !cancelled() && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') }}
 
     steps:
       - name: Notify success
