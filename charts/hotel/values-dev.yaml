@@ -15,7 +15,6 @@ serviceDefaults:
   appType: backend
   replicas: 1
   revisionHistoryLimit: 2
-
   resources:
     requests:
       cpu: 100m
@@ -23,7 +22,6 @@ serviceDefaults:
     limits:
       cpu: 500m
       memory: 512Mi
-
   probes:
     enabled: true
     path: /actuator/health
@@ -36,11 +34,9 @@ serviceDefaults:
     minReplicas: 1
     maxReplicas: 3
     targetCPUUtilizationPercentage: 70
-    
   rollingUpdate:
     maxSurge: 1
     maxUnavailable: 0
-
 services:
   user:
     enabled: true
@@ -67,7 +63,7 @@ services:
     appType: frontend
     name: hotel-frontend
     imageName: hotel-frontend
-    imageTag: "524fdea"
+    imageTag: "e133468"
     port: 3000
     probes:
       enabled: true
@@ -90,22 +86,18 @@ ingress:
       pathType: Prefix
       serviceName: hotel-svc-user
       servicePort: 8083
-
     - path: /api/v1/hotels
       pathType: Prefix
       serviceName: hotel-svc-search
       servicePort: 8085
-
     - path: /api/v1/events
       pathType: Prefix
       serviceName: hotel-svc-event
       servicePort: 8084
-
     - path: /api/v1/bookings
       pathType: Prefix
       serviceName: hotel-svc-event
       servicePort: 8084
-
     - path: /
       pathType: Prefix
       serviceName: hotel-frontend
