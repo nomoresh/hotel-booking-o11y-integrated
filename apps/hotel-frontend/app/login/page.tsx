@@ -7,7 +7,7 @@ import { KeyRound, Mail, ArrowRight } from "lucide-react"
 import { SiteHeader } from "@/components/site-header"
 import { SiteFooter } from "@/components/site-footer"
 import { apiFetch } from "@/lib/api"
-import { setStoredUser } from "@/lib/auth"
+import { setStoredUser, type AuthUser } from "@/lib/auth"
 
 export default function LoginPage() {
   const router = useRouter()
@@ -21,10 +21,13 @@ export default function LoginPage() {
     setError("")
     setIsSubmitting(true)
     try {
-      const user = await apiFetch("/api/v1/users/login", {
+      const user = await apiFetch<AuthUser>("/api/v1/users/login", {
         method: "POST",
         body: JSON.stringify({ email, password }),
       })
+      if (!user) {
+         throw new Error("로그인 응답에 사용자 정보가 없습니다.")
+      }
       setStoredUser(user)
       router.push("/")
     } catch (err: any) {

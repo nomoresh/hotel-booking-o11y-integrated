@@ -10,6 +10,10 @@ import { WaitingRoom } from "@/components/waiting-room"
 import { apiFetch } from "@/lib/api"
 import { useAuth } from "@/lib/auth"
 
+interface BookingResponse {
+  id: string | number
+}
+
 export function EventDealCard({ deal }: { deal: ResolvedDeal }) {
   const router = useRouter()
   const { hotel, checkIn, checkOut } = deal
@@ -35,7 +39,7 @@ export function EventDealCard({ deal }: { deal: ResolvedDeal }) {
   const handleWaitingSuccess = async () => {
     setIsWaiting(false)
     try {
-      const booking = await apiFetch("/api/v1/bookings", {
+      const booking = await apiFetch<BookingResponse>("/api/v1/bookings", {
         method: "POST",
         body: JSON.stringify({
           hotelId: hotel.id,
@@ -49,8 +53,12 @@ export function EventDealCard({ deal }: { deal: ResolvedDeal }) {
           eventDeal: true,
         }),
       })
+
+      if (!booking){
+        throw new Error("예약 응답에 예약 정보가 없습니다.")
+      }
       router.push(
-        `/booking/confirmation?hotel=${hotel.id}&in=${checkIn}&out=${checkOut}&guests=${deal.deal.guests}&nights=${deal.deal.nights}&total=${hotel.price}&bookingId=${booking.id}`
+        `/booking/confirmation?hotel=${hotel.id}&in=${checkIn}&out=${checkOut}&guests=${deal.deal.guests}&nights=${deal.deal.nights}&total=${hotel.price}&bookingId=${encodeURIComponent(String(booking.id))}`
       )
     } catch (err: any) {
       alert(err.message || "예약에 실패했습니다.")

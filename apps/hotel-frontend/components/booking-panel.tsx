@@ -14,6 +14,10 @@ function todayISO(offset = 0) {
   return d.toISOString().slice(0, 10)
 }
 
+interface BookingResponse {
+  id: string | number
+}
+
 // 특가 모드를 위한 props 인터페이스
 interface BookingPanelProps {
   hotel: Hotel
@@ -90,7 +94,7 @@ export function BookingPanel({
     setReserveError("")
     setIsReserving(true)
     try {
-      const booking = await apiFetch("/api/v1/bookings", {
+      const booking = await apiFetch<BookingResponse>("/api/v1/bookings", {
         method: "POST",
         body: JSON.stringify({
           hotelId: hotel.id,
@@ -105,6 +109,10 @@ export function BookingPanel({
         }),
       })
 
+      if (!booking) {
+        throw new Error("예약 응답에 예약 정보가 없습니다.")
+      }
+
       const params = new URLSearchParams({
         hotel: hotel.id,
         in: finalCheckIn,
@@ -112,7 +120,7 @@ export function BookingPanel({
         guests: String(finalGuests),
         nights: String(nights),
         total: String(total),
-        bookingId: booking.id,
+        bookingId: String(booking.id),
       })
       router.push(`/booking/confirmation?${params.toString()}`)
     } catch (err: any) {
