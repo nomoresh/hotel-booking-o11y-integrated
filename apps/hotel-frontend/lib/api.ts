@@ -3,6 +3,7 @@ const SERVICE_BASE_URLS: Record<string, string> = {
   "/api/v1/users": process.env.NEXT_PUBLIC_USER_API_URL || "http://localhost:8083",
   "/api/v1/bookings": process.env.NEXT_PUBLIC_EVENT_API_URL || "http://localhost:8084",
   "/api/v1/events": process.env.NEXT_PUBLIC_EVENT_API_URL || "http://localhost:8084",
+  "/api/v1/queue": process.env.NEXT_PUBLIC_EVENT_API_URL || "http://localhost:8084",
   "/api/v1/hotels": process.env.NEXT_PUBLIC_SEARCH_API_URL || "http://localhost:8085",
 }
 

@@ -59,7 +59,7 @@ export function EventDealCard({ deal }: { deal: ResolvedDeal }) {
 
   return (
     <div className="group flex flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-sm transition-shadow hover:shadow-lg relative">
-      <WaitingRoom isOpen={isWaiting} onSuccess={handleWaitingSuccess} />
+      <WaitingRoom isOpen={isWaiting} dealId={hotel.id} onSuccess={handleWaitingSuccess} />
 
       <Link href={deal.soldOut ? "#" : `/events/${hotel.id}`} className="flex flex-col flex-1">
         <div className="relative aspect-[4/3] overflow-hidden">

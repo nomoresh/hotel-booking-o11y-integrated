@@ -25,7 +25,7 @@ export default function EventDetailPage({ params }: EventDetailPageProps) {
 
   return (
     <div className="flex min-h-screen flex-col">
-    <WaitingRoom isOpen={isWaiting} onSuccess={handleWaitingSuccess} />
+    <WaitingRoom isOpen={isWaiting} dealId={hotel.id} onSuccess={handleWaitingSuccess} />
       <SiteHeader />
       <main className="flex-1">
         <div className="mx-auto max-w-6xl px-4 py-6">
