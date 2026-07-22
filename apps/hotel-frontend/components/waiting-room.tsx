@@ -34,18 +34,18 @@ export function WaitingRoom({ isOpen, dealId, onSuccess }: WaitingRoomProps) {
 
     let cancelled = false
 
-    apiFetch(`/api/v1/queue/${dealId}/join`, { method: "POST" })
-      .then((data: QueueStatusResponse) => {
-        if (!cancelled) setStatus(data)
+    apiFetch<QueueStatusResponse>(`/api/v1/queue/${dealId}/join`, { method: "POST" })
+      .then((data) => {
+        if (!cancelled && data) setStatus(data)
       })
       .catch(() => {
         // 대기열 API 실패 시에도 화면 자체는 유지 (폴링에서 재시도됨)
       })
 
     const timer = setInterval(() => {
-      apiFetch(`/api/v1/queue/${dealId}/status`)
-        .then((data: QueueStatusResponse) => {
-          if (!cancelled) setStatus(data)
+      apiFetch<QueueStatusResponse>(`/api/v1/queue/${dealId}/status`)
+        .then((data) => {
+          if (!cancelled && data) setStatus(data)
         })
         .catch(() => {})
     }, POLL_INTERVAL_MS)
