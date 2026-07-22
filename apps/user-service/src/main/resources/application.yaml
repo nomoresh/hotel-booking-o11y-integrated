@@ -12,7 +12,7 @@ spring:
   datasource:
     url: jdbc:postgresql://localhost:5433/hoteldb
     username: hotel
-    password: hotel1234
+    password: ${SPRING_DATASOURCE_PASSWORD}
   jpa:
     hibernate:
       ddl-auto: update

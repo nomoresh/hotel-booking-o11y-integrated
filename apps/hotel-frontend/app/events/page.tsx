@@ -22,9 +22,9 @@ export default function EventsPage() {
     let cancelled = false
 
     // 백엔드(Redis)가 들고 있는 실시간 잔여 수량으로 정적 mock 수치를 덮어씀
-    apiFetch("/api/v1/events")
-      .then((liveDeals: LiveDeal[]) => {
-        if (cancelled) return
+    apiFetch<LiveDeal[]>("/api/v1/events")
+      .then((liveDeals) => {
+        if (cancelled || !liveDeals) return
         setDeals((prev) =>
           prev.map((resolved) => {
             const live = liveDeals.find((d) => d.dealId === resolved.hotel.id)

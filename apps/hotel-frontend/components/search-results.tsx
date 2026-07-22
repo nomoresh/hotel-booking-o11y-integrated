@@ -39,7 +39,10 @@ export function SearchResults() {
 
         // search-service는 id/city/area/basePrice/rating만 내려주므로,
         // 이미지·태그 등 화면에 필요한 나머지 정보는 정적 데이터에서 id로 매칭해 채움
-        const matched: { id: string }[] = await apiFetch(`/api/v1/hotels?${query.toString()}`)
+        const matched =
+          (await apiFetch<{ id: string }[]>(
+            `/api/v1/hotels?${query.toString()}`
+          )) ?? []
         if (cancelled) return
         const hotels = matched
           .map((h) => getHotel(h.id))

@@ -1,0 +1,26 @@
+{{- $ingress := .Values.ingress | default dict }}
+{{- if (default false $ingress.enabled) }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: hotel-ingress
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    app: hotel-ingress
+  annotations:
+{{- toYaml (default dict $ingress.annotations) | nindent 4 }}
+spec:
+  ingressClassName: {{ default "alb" $ingress.className }}
+  rules:
+    - http:
+        paths:
+{{- range (default list $ingress.rules) }}
+          - path: {{ .path }}
+            pathType: {{ .pathType }}
+            backend:
+              service:
+                name: {{ .serviceName }}
+                port:
+                  number: {{ .servicePort }}
+{{- end }}
+{{- end }}

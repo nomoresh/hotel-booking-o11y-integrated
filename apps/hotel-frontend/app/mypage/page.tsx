@@ -67,8 +67,8 @@ export default function MyPage() {
     const fetchMyBookings = async () => {
       try {
         // 백엔드 Booking Service의 내 예약 내역 엔드포인트 호출
-        const data = await apiFetch("/api/v1/bookings/me")
-        setBookings(data)
+        const data = await apiFetch<Booking[]>("/api/v1/bookings/me")
+        setBookings(data ?? [])
       } catch (err: any) {
         console.error(`[MyPage Error] Status: ${err.status} | TraceId 연동 영역`)
         setError("예약 내역을 불러오는 데 실패했습니다.")
