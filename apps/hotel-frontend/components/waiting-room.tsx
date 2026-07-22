@@ -2,46 +2,72 @@
 
 import { useEffect, useRef, useState } from "react"
 import { Loader2, Users, Hourglass, ShieldAlert } from "lucide-react"
+import { apiFetch } from "@/lib/api"
 
 interface WaitingRoomProps {
   isOpen: boolean
+  dealId: string
   onSuccess: () => void
 }
 
-export function WaitingRoom({ isOpen, onSuccess }: WaitingRoomProps) {
-  const [waitingCount, setWaitingCount] = useState(1753)
-  const [estimatedSeconds, setEstimatedSeconds] = useState(12)
+interface QueueStatusResponse {
+  state: "WAITING" | "ADMITTED" | "NOT_IN_QUEUE"
+  position: number | null
+  totalWaiting: number | null
+  estimatedSeconds: number | null
+  admissionToken: string | null
+}
+
+const POLL_INTERVAL_MS = 1500
+
+export function WaitingRoom({ isOpen, dealId, onSuccess }: WaitingRoomProps) {
+  const [status, setStatus] = useState<QueueStatusResponse | null>(null)
   const hasFinishedRef = useRef(false)
 
-  // 대기열 시뮬레이션: 상태 갱신만 수행 (부수효과 없음)
+  // 실제 대기열 진입 + 주기적 상태 폴링 (더 이상 Math.random() 연출이 아니라 진짜 서버 상태)
   useEffect(() => {
     if (!isOpen) {
       hasFinishedRef.current = false
-      setWaitingCount(1753)
-      setEstimatedSeconds(12)
+      setStatus(null)
       return
     }
 
-    const timer = setInterval(() => {
-      setWaitingCount((prev) => {
-        const nextCount = Math.max(0, prev - Math.floor(Math.random() * 150) - 50)
-        return nextCount <= 50 ? 0 : nextCount
+    let cancelled = false
+
+    apiFetch<QueueStatusResponse>(`/api/v1/queue/${dealId}/join`, { method: "POST" })
+      .then((data) => {
+        if (!cancelled && data) setStatus(data)
       })
-      setEstimatedSeconds((prev) => (prev > 1 ? prev - 1 : 1))
-    }, 1000)
+      .catch(() => {
+        // 대기열 API 실패 시에도 화면 자체는 유지 (폴링에서 재시도됨)
+      })
 
-    return () => clearInterval(timer)
-  }, [isOpen])
+    const timer = setInterval(() => {
+      apiFetch<QueueStatusResponse>(`/api/v1/queue/${dealId}/status`)
+        .then((data) => {
+          if (!cancelled && data) setStatus(data)
+        })
+        .catch(() => {})
+    }, POLL_INTERVAL_MS)
 
-  // 대기 완료 시점 감지: onSuccess는 여기서 정확히 한 번만 호출
+    return () => {
+      cancelled = true
+      clearInterval(timer)
+    }
+  }, [isOpen, dealId])
+
+  // 승격(ADMITTED) 감지: onSuccess는 여기서 정확히 한 번만 호출
   useEffect(() => {
-    if (isOpen && waitingCount === 0 && !hasFinishedRef.current) {
+    if (isOpen && status?.state === "ADMITTED" && !hasFinishedRef.current) {
       hasFinishedRef.current = true
       onSuccess()
     }
-  }, [isOpen, waitingCount, onSuccess])
+  }, [isOpen, status, onSuccess])
 
   if (!isOpen) return null
+
+  const waitingCount = status?.totalWaiting ?? 0
+  const estimatedSeconds = status?.estimatedSeconds ?? 0
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-foreground/60 backdrop-blur-sm p-4">
