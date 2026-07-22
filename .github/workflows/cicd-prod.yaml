@@ -1,0 +1,438 @@
+name: PROD ECR CI/CD
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "apps/user-service/**"
+      - "apps/search-service/**"
+      - "apps/event-service/**"
+      - "apps/hotel-frontend/**"
+      - ".github/workflows/cicd-prod.yaml"
+
+  workflow_dispatch:
+    inputs:
+      build_all:
+        description: "Build all services"
+        required: true
+        default: "false"
+        type: choice
+        options:
+          - "false"
+          - "true"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cicd-prod-main
+  cancel-in-progress: false
+
+env:
+  AWS_REGION: ap-northeast-2
+  ECR_REGISTRY: 074467724762.dkr.ecr.ap-northeast-2.amazonaws.com
+  VALUES_FILE: charts/hotel/values-prod.yaml
+
+jobs:
+  detect-changes:
+    name: Detect changed services
+    runs-on: ubuntu-latest
+
+    outputs:
+      user: ${{ steps.filter.outputs.user }}
+      search: ${{ steps.filter.outputs.search }}
+      event: ${{ steps.filter.outputs.event }}
+      frontend: ${{ steps.filter.outputs.frontend }}
+      build_all: ${{ steps.build_all.outputs.value }}
+      matrix: ${{ steps.matrix.outputs.matrix }}
+      has_changes: ${{ steps.matrix.outputs.has_changes }}
+
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Detect changed services
+        id: filter
+        uses: dorny/paths-filter@v4
+        with:
+          base: ${{ github.event_name == 'push' && github.event.before || github.ref_name }}
+          ref: ${{ github.sha }}
+          filters: |
+            user:
+              - "apps/user-service/**"
+            search:
+              - "apps/search-service/**"
+            event:
+              - "apps/event-service/**"
+            frontend:
+              - "apps/hotel-frontend/**"
+
+      - name: Resolve build_all option
+        id: build_all
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && \
+             [ "${{ inputs.build_all }}" = "true" ]; then
+            echo "value=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "value=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Create changed service matrix
+        id: matrix
+        shell: bash
+        env:
+          BUILD_ALL: ${{ steps.build_all.outputs.value }}
+          USER_CHANGED: ${{ steps.filter.outputs.user }}
+          SEARCH_CHANGED: ${{ steps.filter.outputs.search }}
+          EVENT_CHANGED: ${{ steps.filter.outputs.event }}
+          FRONTEND_CHANGED: ${{ steps.filter.outputs.frontend }}
+        run: |
+          python - <<'PY'
+          import json
+          import os
+
+          build_all = os.environ["BUILD_ALL"] == "true"
+
+          services = [
+              {
+                  "service_key": "user",
+                  "service_name": "user-service",
+                  "context": "apps/user-service",
+                  "ecr_repo": "hotel-svc-user",
+                  "service_type": "backend",
+                  "changed": os.environ["USER_CHANGED"] == "true",
+              },
+              {
+                  "service_key": "search",
+                  "service_name": "search-service",
+                  "context": "apps/search-service",
+                  "ecr_repo": "hotel-svc-search",
+                  "service_type": "backend",
+                  "changed": os.environ["SEARCH_CHANGED"] == "true",
+              },
+              {
+                  "service_key": "event",
+                  "service_name": "event-service",
+                  "context": "apps/event-service",
+                  "ecr_repo": "hotel-svc-event",
+                  "service_type": "backend",
+                  "changed": os.environ["EVENT_CHANGED"] == "true",
+              },
+              {
+                  "service_key": "frontend",
+                  "service_name": "hotel-frontend",
+                  "context": "apps/hotel-frontend",
+                  "ecr_repo": "hotel-frontend",
+                  "service_type": "frontend",
+                  "changed": os.environ["FRONTEND_CHANGED"] == "true",
+              },
+          ]
+
+          include = []
+
+          for service in services:
+              if build_all or service["changed"]:
+                  service.pop("changed")
+                  include.append(service)
+
+          matrix = {"include": include}
+          has_changes = "true" if include else "false"
+
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
+              output.write(
+                  f"matrix={json.dumps(matrix, separators=(',', ':'))}\n"
+              )
+              output.write(f"has_changes={has_changes}\n")
+
+          print("Generated matrix:")
+          print(json.dumps(matrix, indent=2))
+          PY
+
+  test-build-scan-push:
+    name: Test, build, scan and push
+    needs: detect-changes
+
+    if: needs.detect-changes.outputs.has_changes == 'true'
+
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: hoteldb
+          POSTGRES_USER: hotel
+          POSTGRES_PASSWORD: ci-test-password
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd "pg_isready -U hotel -d hoteldb"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.detect-changes.outputs.matrix) }}
+
+    steps:
+      - name: Checkout main commit
+        uses: actions/checkout@v4
+
+      - name: Set short image tag
+        shell: bash
+        run: |
+          echo "IMAGE_TAG=${GITHUB_SHA::7}" >> "$GITHUB_ENV"
+
+      # Backend 테스트
+      - name: Set up JDK 21
+        if: matrix.service_type == 'backend'
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: gradle
+
+      - name: Run backend unit tests
+        if: matrix.service_type == 'backend'
+        working-directory: ${{ matrix.context }}
+        shell: bash
+        env:
+          SPRING_DATASOURCE_URL: jdbc:postgresql://localhost:5433/hoteldb
+          SPRING_DATASOURCE_USERNAME: hotel
+          SPRING_DATASOURCE_PASSWORD: ci-test-password
+          SPRING_DATA_REDIS_HOST: localhost
+          SPRING_DATA_REDIS_PORT: "6379"
+        run: |
+          chmod +x ./gradlew
+          ./gradlew test --no-daemon
+
+      # Frontend 빌드
+      - name: Set up Node.js
+        if: matrix.service_type == 'frontend'
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: ${{ matrix.context }}/package-lock.json
+
+      - name: Build frontend
+        if: matrix.service_type == 'frontend'
+        working-directory: ${{ matrix.context }}
+        shell: bash
+        run: |
+          npm ci
+          npm run build
+
+      # AWS/ECR 인증
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        uses: aws-actions/amazon-ecr-login@v2
+
+      # Docker 이미지 빌드
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Docker image locally
+        uses: docker/build-push-action@v6
+        with:
+          context: ./${{ matrix.context }}
+          platforms: linux/amd64
+          push: false
+          load: true
+          tags: |
+            ${{ env.ECR_REGISTRY }}/${{ matrix.ecr_repo }}:${{ env.IMAGE_TAG }}
+
+      # 이미지 취약점 검사
+      - name: Run Trivy vulnerability scan
+        uses: aquasecurity/trivy-action@v0.35.0
+        with:
+          image-ref: ${{ env.ECR_REGISTRY }}/${{ matrix.ecr_repo }}:${{ env.IMAGE_TAG }}
+          format: table
+          scanners: vuln
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
+
+      # ECR Push
+      - name: Push Docker image to ECR
+        shell: bash
+        run: |
+          IMAGE_URI="${{ env.ECR_REGISTRY }}/${{ matrix.ecr_repo }}:${{ env.IMAGE_TAG }}"
+
+          docker image inspect "$IMAGE_URI"
+          docker push "$IMAGE_URI"
+
+  update-values:
+    name: Update production Helm values
+
+    permissions:
+      contents: write
+
+    needs:
+      - detect-changes
+      - test-build-scan-push
+
+    if: >-
+      needs.detect-changes.outputs.has_changes == 'true' &&
+      needs.test-build-scan-push.result == 'success'
+
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set short image tag
+        shell: bash
+        run: |
+          echo "IMAGE_TAG=${GITHUB_SHA::7}" >> "$GITHUB_ENV"
+
+      - name: Install yq
+        shell: bash
+        run: |
+          sudo wget -qO /usr/local/bin/yq \
+            https://github.com/mikefarah/yq/releases/download/v4.44.3/yq_linux_amd64
+
+          sudo chmod +x /usr/local/bin/yq
+          yq --version
+
+      - name: Verify production values file
+        shell: bash
+        run: |
+          test -f "$VALUES_FILE"
+          yq eval '.' "$VALUES_FILE" > /dev/null
+
+      - name: Update values-prod.yaml image tags
+        shell: bash
+        run: |
+          yq -i '.global.imageRegistry = strenv(ECR_REGISTRY)' "$VALUES_FILE"
+
+          if [ "${{ needs.detect-changes.outputs.build_all }}" = "true" ] || \
+             [ "${{ needs.detect-changes.outputs.user }}" = "true" ]; then
+            yq -i '.services.user.imageName = "hotel-svc-user"' "$VALUES_FILE"
+            yq -i '.services.user.imageTag = strenv(IMAGE_TAG)' "$VALUES_FILE"
+          fi
+
+          if [ "${{ needs.detect-changes.outputs.build_all }}" = "true" ] || \
+             [ "${{ needs.detect-changes.outputs.search }}" = "true" ]; then
+            yq -i '.services.search.imageName = "hotel-svc-search"' "$VALUES_FILE"
+            yq -i '.services.search.imageTag = strenv(IMAGE_TAG)' "$VALUES_FILE"
+          fi
+
+          if [ "${{ needs.detect-changes.outputs.build_all }}" = "true" ] || \
+             [ "${{ needs.detect-changes.outputs.event }}" = "true" ]; then
+            yq -i '.services.event.imageName = "hotel-svc-event"' "$VALUES_FILE"
+            yq -i '.services.event.imageTag = strenv(IMAGE_TAG)' "$VALUES_FILE"
+          fi
+
+          if [ "${{ needs.detect-changes.outputs.build_all }}" = "true" ] || \
+             [ "${{ needs.detect-changes.outputs.frontend }}" = "true" ]; then
+            yq -i '.services.frontend.imageName = "hotel-frontend"' "$VALUES_FILE"
+            yq -i '.services.frontend.imageTag = strenv(IMAGE_TAG)' "$VALUES_FILE"
+          fi
+
+      - name: Validate production Helm chart
+        shell: bash
+        run: |
+          helm lint ./charts/hotel \
+            -f "$VALUES_FILE"
+
+          helm template hotel-prod ./charts/hotel \
+            -f "$VALUES_FILE" \
+            --namespace prod \
+            > /tmp/prod-rendered.yaml
+
+          if grep -E '<no value>|namespace: dev|targetRevision: joon' \
+            /tmp/prod-rendered.yaml; then
+            echo "Invalid development or empty value found in production manifests."
+            exit 1
+          fi
+
+      - name: Commit and push updated values-prod.yaml
+        shell: bash
+        run: |
+          if git diff --quiet -- "$VALUES_FILE"; then
+            echo "No values-prod.yaml changes."
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email \
+            "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git add "$VALUES_FILE"
+          git commit -m "ci: update production image tags ${IMAGE_TAG} [skip ci]"
+          git push origin HEAD:main
+
+  notify-slack:
+    name: Notify Slack
+
+    needs:
+      - detect-changes
+      - test-build-scan-push
+      - update-values
+
+    if: ${{ !cancelled() }}
+
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Notify success
+        if: >-
+          needs.test-build-scan-push.result == 'success' &&
+          needs.update-values.result == 'success'
+        uses: 8398a7/action-slack@v3
+        with:
+          status: success
+          text: |
+            ✅ PROD CI/CD 성공
+            Branch: ${{ github.ref_name }}
+            Commit: ${{ github.sha }}
+            Actor: ${{ github.actor }}
+            Registry: ${{ env.ECR_REGISTRY }}
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+
+      - name: Notify failure
+        if: >-
+          needs.detect-changes.result == 'failure' ||
+          needs.test-build-scan-push.result == 'failure' ||
+          needs.update-values.result == 'failure' ||
+          needs.detect-changes.result == 'cancelled' ||
+          needs.test-build-scan-push.result == 'cancelled' ||
+          needs.update-values.result == 'cancelled'
+        uses: 8398a7/action-slack@v3
+        with:
+          status: failure
+          text: |
+            ❌ PROD CI/CD 실패
+            Branch: ${{ github.ref_name }}
+            Commit: ${{ github.sha }}
+            Actor: ${{ github.actor }}
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
