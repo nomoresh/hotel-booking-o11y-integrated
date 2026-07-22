@@ -2,23 +2,19 @@ global:
   namespace: dev
   imageRegistry: 074467724762.dkr.ecr.ap-northeast-2.amazonaws.com
   imagePullPolicy: Always
-
 database:
   host: hotel-postgres
   port: 5432
   name: hoteldb
   username: hotel
   secretName: hotel-db-secret
-
 redis:
   host: hotel-redis
   port: 6379
-
 serviceDefaults:
   appType: backend
   replicas: 1
   revisionHistoryLimit: 2
-
   resources:
     requests:
       cpu: 100m
@@ -33,13 +29,11 @@ serviceDefaults:
     periodSeconds: 10
     timeoutSeconds: 3
     failureThreshold: 3
-
   hpa:
     enabled: true
     minReplicas: 1
     maxReplicas: 3
     targetCPUUtilizationPercentage: 70
-
   rollingUpdate:
     maxSurge: 1
     maxUnavailable: 0
@@ -50,14 +44,12 @@ services:
     imageName: hotel-svc-user
     imageTag: "ab27e76"
     port: 8083
-
   search:
     enabled: true
     name: hotel-svc-search
     imageName: hotel-svc-search
     imageTag: "ab27e76"
     port: 8085
-
   event:
     enabled: true
     name: hotel-svc-event
@@ -66,15 +58,13 @@ services:
     port: 8084
     env:
       SEARCH_SERVICE_BASE_URL: "http://hotel-svc-search:8085"
-
   frontend:
     enabled: true
     appType: frontend
     name: hotel-frontend
     imageName: hotel-frontend
-    imageTag: "e133468"
+    imageTag: "a1e4c60"
     port: 3000
-
     probes:
       enabled: true
       path: /
@@ -82,44 +72,36 @@ services:
       periodSeconds: 10
       timeoutSeconds: 3
       failureThreshold: 3
-
 ingress:
   enabled: true
   className: alb
-
   annotations:
     alb.ingress.kubernetes.io/scheme: internet-facing
     alb.ingress.kubernetes.io/target-type: ip
     alb.ingress.kubernetes.io/listen-ports: '[{"HTTP":80}]'
     alb.ingress.kubernetes.io/healthcheck-path: /
     alb.ingress.kubernetes.io/success-codes: "200,302,404"
-
   rules:
     - path: /api/v1/users
       pathType: Prefix
       serviceName: hotel-svc-user
       servicePort: 8083
-
     - path: /api/v1/hotels
       pathType: Prefix
       serviceName: hotel-svc-search
       servicePort: 8085
-
     - path: /api/v1/events
       pathType: Prefix
       serviceName: hotel-svc-event
       servicePort: 8084
-
     - path: /api/v1/bookings
       pathType: Prefix
       serviceName: hotel-svc-event
       servicePort: 8084
-
     - path: /api/v1/queue
       pathType: Prefix
       serviceName: hotel-svc-event
       servicePort: 8084
-      
     - path: /
       pathType: Prefix
       serviceName: hotel-frontend
