@@ -11,7 +11,6 @@ import java.util.Map;
 
 // 특가 대기열 API — 기존 예약 생성(BookingController)과는 완전히 분리된 신규 기능.
 // 아직 예약 생성 API가 이 입장 토큰을 요구하지 않는다 (연결은 별도 단계로 남겨둠).
-@CrossOrigin(origins = "http://localhost:3000", allowedHeaders = "*", allowCredentials = "true")
 @RestController
 @RequestMapping("/api/v1/queue")
 public class QueueController {

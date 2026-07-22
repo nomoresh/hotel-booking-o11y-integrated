@@ -1,10 +1,15 @@
-// API 게이트웨이 없이 서비스별로 포트가 분리되어 있어, 경로 접두사로 백엔드를 구분합니다.
+// 로컬 개발: 서비스별로 포트가 분리되어 있어 절대 URL로 직접 호출.
+// 클러스터 배포: Ingress가 프론트/백엔드를 같은 도메인 아래 경로로 라우팅하므로,
+// 빌드 시 NEXT_PUBLIC_*_API_URL을 빈 문자열("")로 넣으면 상대경로로 동작함.
+//
+// 반드시 ??(nullish coalescing)를 써야 함 — ||를 쓰면 빈 문자열("")도 "값이 없다"고
+// 취급해서 로컬 기본값으로 빠져버리기 때문에, 빌드 시 빈 값을 넣어도 무시됨.
 const SERVICE_BASE_URLS: Record<string, string> = {
-  "/api/v1/users": process.env.NEXT_PUBLIC_USER_API_URL || "http://localhost:8083",
-  "/api/v1/bookings": process.env.NEXT_PUBLIC_EVENT_API_URL || "http://localhost:8084",
-  "/api/v1/events": process.env.NEXT_PUBLIC_EVENT_API_URL || "http://localhost:8084",
-  "/api/v1/queue": process.env.NEXT_PUBLIC_EVENT_API_URL || "http://localhost:8084",
-  "/api/v1/hotels": process.env.NEXT_PUBLIC_SEARCH_API_URL || "http://localhost:8085",
+  "/api/v1/users": process.env.NEXT_PUBLIC_USER_API_URL ?? "http://localhost:8083",
+  "/api/v1/bookings": process.env.NEXT_PUBLIC_EVENT_API_URL ?? "http://localhost:8084",
+  "/api/v1/events": process.env.NEXT_PUBLIC_EVENT_API_URL ?? "http://localhost:8084",
+  "/api/v1/queue": process.env.NEXT_PUBLIC_EVENT_API_URL ?? "http://localhost:8084",
+  "/api/v1/hotels": process.env.NEXT_PUBLIC_SEARCH_API_URL ?? "http://localhost:8085",
 }
 
 function resolveBaseUrl(endpoint: string): string {
