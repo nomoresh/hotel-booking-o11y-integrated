@@ -117,6 +117,11 @@ ingress:
       serviceName: hotel-svc-event
       servicePort: 8084
 
+    - path: /api/v1/queue
+      pathType: Prefix
+      serviceName: hotel-svc-event
+      servicePort: 8084
+
     - path: /
       pathType: Prefix
       serviceName: hotel-frontend

@@ -34,6 +34,10 @@ const nextConfig = {
         source: "/api/v1/bookings/:path*",
         destination: "http://localhost:8084/api/v1/bookings/:path*",
       },
+      {
+        source: "/api/v1/queue/:path*",
+        destination: "http://localhost:8084/api/v1/queue/:path*",
+      },
     ]
   },
 }
