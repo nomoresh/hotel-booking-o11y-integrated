@@ -1,5 +1,5 @@
 global:
-  namespace: prod
+  namespace: dev
   imageRegistry: 074467724762.dkr.ecr.ap-northeast-2.amazonaws.com
   imagePullPolicy: Always
 
@@ -16,15 +16,15 @@ redis:
 
 serviceDefaults:
   appType: backend
-  replicas: 2
-  revisionHistoryLimit: 3
+  replicas: 1
+  revisionHistoryLimit: 2
 
   resources:
     requests:
-      cpu: 200m
+      cpu: 100m
       memory: 256Mi
     limits:
-      cpu: 1000m
+      cpu: 500m
       memory: 512Mi
   probes:
     enabled: true
@@ -36,8 +36,8 @@ serviceDefaults:
 
   hpa:
     enabled: true
-    minReplicas: 2
-    maxReplicas: 5
+    minReplicas: 1
+    maxReplicas: 3
     targetCPUUtilizationPercentage: 70
 
   rollingUpdate:
