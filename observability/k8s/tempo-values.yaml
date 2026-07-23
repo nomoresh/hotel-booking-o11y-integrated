@@ -1,0 +1,21 @@
+# Tempo 단독 배포. 로컬과 동일하게 OTLP(gRPC/HTTP)로 트레이스를 직접 수신.
+# EBS CSI 드라이버가 없어 영구 저장 불가 — Loki와 동일하게 emptyDir 기반으로 단순화.
+persistence:
+  enabled: false
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 128Mi
+  limits:
+    cpu: 300m
+    memory: 512Mi
+
+tempo:
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+
+# 데모 규모라 리텐션 짧게
+retention: 24h

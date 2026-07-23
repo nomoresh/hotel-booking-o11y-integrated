@@ -1,0 +1,49 @@
+# kube-prometheus-stack (Prometheus + Grafana + kube-state-metrics + node-exporter) 배포용 values.
+# 로컬 docker-compose용 observability/prometheus, observability/grafana와는 별개로,
+# 클러스터 내부(dev 네임스페이스 앱)를 관측하기 위한 설정.
+#
+# 설치:
+#   helm install kube-prometheus-stack prometheus-community/kube-prometheus-stack \
+#     -n monitoring -f observability/k8s/kube-prometheus-stack-values.yaml
+
+grafana:
+  adminPassword: admin # 로컬 데모(admin/admin)와 동일하게 맞춤
+  service:
+    type: ClusterIP
+
+prometheus:
+  prometheusSpec:
+    retention: 3d # 데모용 클러스터라 길게 안 가져감
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi
+    # 기본값은 이 Helm 릴리즈와 같은 label을 가진 ServiceMonitor만 인식함.
+    # 우리 앱용 ServiceMonitor는 별도로 만들 거라 false로 풀어서 전체를 보게 함.
+    serviceMonitorSelectorNilUsesHelmValues: false
+    podMonitorSelectorNilUsesHelmValues: false
+
+# 알림은 이번 단계에서 범위 밖 — 메트릭/Grafana부터 확인 후 필요하면 켬
+alertmanager:
+  enabled: false
+
+prometheusOperator:
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+
+kube-state-metrics:
+  resources:
+    requests:
+      cpu: 20m
+      memory: 64Mi
+
+nodeExporter:
+  resources:
+    requests:
+      cpu: 20m
+      memory: 32Mi

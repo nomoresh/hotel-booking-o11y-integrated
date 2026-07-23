@@ -1,0 +1,40 @@
+# kube-prometheus-stack의 Grafana 사이드카가 이 라벨(grafana_datasource: "1")을 보고
+# 자동으로 데이터소스를 추가함. 로컬(observability/grafana/provisioning/datasources/*)과
+# 동일한 상호 연동(로그↔트레이스 점프, 트레이스→서비스맵) 설정을 그대로 재현.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: hotel-grafana-datasources
+  namespace: monitoring
+  labels:
+    grafana_datasource: "1"
+data:
+  loki-tempo-datasources.yaml: |
+    apiVersion: 1
+    datasources:
+      - name: Loki
+        uid: loki
+        type: loki
+        access: proxy
+        url: http://loki.monitoring.svc.cluster.local:3100
+        editable: false
+        jsonData:
+          derivedFields:
+            - datasourceUid: tempo
+              matcherRegex: "trace_id=(\\w+)"
+              name: TraceID
+      - name: Tempo
+        uid: tempo
+        type: tempo
+        access: proxy
+        url: http://tempo.monitoring.svc.cluster.local:3200
+        editable: false
+        jsonData:
+          tracesToLogsV2:
+            datasourceUid: loki
+            spanStartTimeShift: "-5m"
+            spanEndTimeShift: "5m"
+            filterByTraceID: true
+            filterBySpanID: false
+          serviceMap:
+            datasourceUid: prometheus
