@@ -1,7 +1,9 @@
 # Tempo 단독 배포. 로컬과 동일하게 OTLP(gRPC/HTTP)로 트레이스를 직접 수신.
-# EBS CSI 드라이버가 없어 영구 저장 불가 — Loki와 동일하게 emptyDir 기반으로 단순화.
+# EBS CSI 드라이버 설치 완료 후 emptyDir 대신 실제 PVC로 전환 (파드 재시작해도 트레이스 유지됨)
 persistence:
-  enabled: false
+  enabled: true
+  size: 5Gi
+  storageClassName: gp2
 
 resources:
   requests:
