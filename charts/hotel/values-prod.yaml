@@ -42,19 +42,19 @@ services:
     enabled: true
     name: hotel-svc-user
     imageName: hotel-svc-user
-    imageTag: "f88951d"
+    imageTag: "19d413d"
     port: 8083
   search:
     enabled: true
     name: hotel-svc-search
     imageName: hotel-svc-search
-    imageTag: "f88951d"
+    imageTag: "19d413d"
     port: 8085
   event:
     enabled: true
     name: hotel-svc-event
     imageName: hotel-svc-event
-    imageTag: "f88951d"
+    imageTag: "19d413d"
     port: 8084
     env:
       SEARCH_SERVICE_BASE_URL: "http://hotel-svc-search:8085"
