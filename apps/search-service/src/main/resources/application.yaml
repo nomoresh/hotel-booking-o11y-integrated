@@ -1,13 +1,18 @@
 server:
   port: 8085 # 호텔 조회
 
+# 로컬 개발(3000)과 클러스터 프론트 주소를 기본값으로 같이 허용.
+# 배포 환경이 바뀌면 CORS_ALLOWED_ORIGINS 환경변수로 덮어쓰면 됨 (콤마로 여러 개 구분).
+cors:
+  allowed-origins: http://localhost:3000,http://k8s-dev-hoteling-349b0ab528-48488193.ap-northeast-2.elb.amazonaws.com
+
 spring:
   application:
     name: search-service
   datasource:
     url: jdbc:postgresql://localhost:5433/hoteldb
     username: hotel
-    password: hotel1234
+    password: ${SPRING_DATASOURCE_PASSWORD}
   jpa:
     hibernate:
       ddl-auto: update
@@ -27,4 +32,4 @@ management:
       probability: 1.0 # 로컬 데모용 — 모든 요청을 샘플링 (운영에서는 낮춰야 함)
   otlp:
     tracing:
-      endpoint: http://localhost:4318/v1/traces
+      endpoint: ${OTLP_TRACING_ENDPOINT:http://localhost:4318/v1/traces}

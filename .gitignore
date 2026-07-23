@@ -21,6 +21,7 @@
 
 # OS
 .DS_Store
+
 # Terraform 다운로드 파일
 .terraform/
 
@@ -40,5 +41,10 @@ crash.log
 crash.*.log
 
 # 임시 잠금 파일
-.terraform.tfstate.lock.info.env
+.terraform.tfstate.lock.info
+
+# 로그
+logs/
+
+# Alertmanager 설정 (웹훅 URL 포함)
 observability/alertmanager/alertmanager.yml
