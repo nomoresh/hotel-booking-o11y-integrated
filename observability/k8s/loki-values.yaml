@@ -1,0 +1,62 @@
+# Loki 단독 배포 (Promtail 없음).
+# 로컬과 동일하게, 앱의 Logback(loki-logback-appender)이 이 Loki에 직접 push하는 구조.
+# 파일을 tail할 대상이 없으므로 Promtail이 포함된 loki-stack 대신 loki 차트만 사용.
+deploymentMode: SingleBinary
+
+loki:
+  auth_enabled: false
+  commonConfig:
+    replication_factor: 1
+  storage:
+    type: filesystem
+  schemaConfig:
+    configs:
+      - from: "2024-01-01"
+        store: tsdb
+        object_store: filesystem
+        schema: v13
+        index:
+          prefix: index_
+          period: 24h
+
+# SimpleScalable 모드 컴포넌트는 SingleBinary와 같이 켜지면 안 되므로 명시적으로 0
+read:
+  replicas: 0
+write:
+  replicas: 0
+backend:
+  replicas: 0
+
+singleBinary:
+  replicas: 1
+  # persistence를 꺼도 /var/loki 자체는 컨테이너가 데이터를 쓸 수 있는 쓰기 가능한 볼륨이 필요해서
+  # emptyDir을 직접 마운트해줌 (안 하면 "read-only file system" 에러로 계속 죽음)
+  extraVolumes:
+    - name: loki-storage
+      emptyDir: {}
+  extraVolumeMounts:
+    - name: loki-storage
+      mountPath: /var/loki
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      cpu: 300m
+      memory: 512Mi
+  # 이 클러스터엔 EBS CSI 드라이버가 설치되어 있지 않아 PVC가 아예 프로비저닝되지 않음
+  # (IAM/IRSA 설정이 필요한 인프라 작업이라 범위 밖으로 둠). 데모 목적상 영구 저장 없이
+  # emptyDir(파드 생명주기와 함께 사라짐)로 단순화 — 파드 재시작 시 로그는 유실됨.
+  persistence:
+    enabled: false
+
+# 이 차트에 딸려오는 게이트웨이/캐시/캐노리/멀티테넌시용 부가 컴포넌트는 단일 인스턴스 데모엔 불필요
+# (chunksCache는 클러스터 리소스 부족으로 스케줄링 자체가 안 되어서 꺼둠 — 성능 최적화용이라 없어도 동작함)
+gateway:
+  enabled: false
+test:
+  enabled: false
+lokiCanary:
+  enabled: false
+chunksCache:
+  enabled: false
