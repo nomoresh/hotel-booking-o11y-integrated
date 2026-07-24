@@ -1,6 +1,8 @@
 global:
   resolve_timeout: 5m
-  slack_api_url: 'https://hooks.slack.com/services/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'
+  # 실제 값은 커밋하지 않음 — .github/workflows/deploy-alertmanager.yml이 배포 시
+  # GitHub Secret(SLACK_WEBHOOK_URL)으로 이 파일을 다시 생성해서 덮어씀
+  slack_api_url: '__REPLACED_BY_CI_FROM_GITHUB_SECRET__'
 
 route:
   group_by: ['alertname', 'job']
