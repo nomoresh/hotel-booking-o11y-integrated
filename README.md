@@ -53,27 +53,32 @@
 - **`hotel-frontend` (Next.js):** 특가 상품 노출 및 실시간 예약 대시보드 UI. *(포트 3000)*
 - **`user-service`:** 회원가입/로그인/로그아웃. BCrypt 비밀번호 해싱, JWT를 HttpOnly 쿠키로 발급. *(포트 8083)*
 - **`search-service`:** 호텔 및 리조트 정보 조회. 지역/키워드/가격대/평점 조건별 검색과 정렬을 지원하며, 검색 결과는 Caffeine 기반 인메모리 캐시(TTL 5분)로 응답. 프론트 `/search` 페이지가 실제로 이 API를 호출하며, 응답받은 `id`를 프론트의 정적 호텔 데이터(이미지·태그 등 상세 정보)와 매칭해 화면을 구성함. *(포트 8085)*
-- **`event-service`:** 예약 생성/조회/취소 및 특가 선착순 재고 관리. Redis 원자 연산(Lua 스크립트)으로 재고 초과 판매 방지, 인당 구매 개수 제한. 예약 생성 시 search-service를 호출해 결제 금액을 서버가 직접 재계산·검증(클라이언트 조작 방지, search-service 장애 시 503) — 이 호출은 분산 트레이싱으로 두 서비스가 하나의 트레이스에 묶여 추적됨. 예약 취소는 일반 예약만 체크인 하루 전까지 가능하며 특가 상품은 취소 불가. *(포트 8084)*
+- **`event-service`:** 예약 생성/조회/취소 및 특가 선착순 재고 관리. Redis 원자 연산(Lua 스크립트)으로 재고 초과 판매 방지, 인당 구매 개수 제한. 예약 생성 시 search-service를 호출해 결제 금액을 서버가 직접 재계산·검증(클라이언트 조작 방지, search-service 장애 시 503) — 이 호출은 분산 트레이싱으로 두 서비스가 하나의 트레이스에 묶여 추적됨. 예약 취소는 일반 예약만 체크인 하루 전까지 가능하며 특가 상품은 취소 불가. 특가 구매는 대기열(Redis Sorted Set + Lua 원자 승격)을 통과해 발급받은 입장 토큰을 서버가 검증해야만 처리되며, 대기열 UI를 건너뛰고 API를 직접 호출하는 것은 차단됨. *(포트 8084)*
 - **`notice-service`:** 예약 완료 후 비동기로 알림 전송 (분산 추적 컨텍스트 전파 검증용). *(계획 단계, 메시지 큐 선정부터 필요 — 아직 미착수)*
 
 ### 📊 [2] Observability 통합 흐름 (O11y Pipeline)
-[ App Pods ] ──(Metrics)──────> [ Prometheus ] ──────> [ Grafana Mimir ] ──┐
-──(Structured Log)─> [ Promtail ] ────────> [ Grafana Loki ]  ──┼─> [ Grafana UI ]
-──(Traces Context)─> [ Otel Collector ] ──> [ Grafana Tempo ] ──┘
+[ App Pods ] ──(Metrics)──────> [ Prometheus ] ──────> [ Grafana ] ──┐
+──(Structured Log)─> [ Logback → Loki 직접 push ] ──────┼─> [ Grafana UI ]
+──(Traces Context)─> [ Micrometer Tracing → OTLP ] ──> [ Tempo ] ──┘
 
-> **메트릭·로그·트레이싱(3/3축) 완료.** 3개 서비스 모두 Micrometer + `micrometer-registry-prometheus`로 `/actuator/prometheus`를 노출하고,
-> 로컬 Prometheus가 15초 주기로 스크래핑. 로그는 Promtail 없이 Logback(`loki-logback-appender`)이 Loki로 직접 push (서비스가
+> **메트릭·로그·트레이싱(3/3축) 완료 — 로컬 + 실제 EKS `dev` 클러스터 양쪽에서 동작.** 3개 서비스 모두 Micrometer + `micrometer-registry-prometheus`로 `/actuator/prometheus`를 노출하고,
+> Prometheus가 15초 주기로 스크래핑. 로그는 Promtail 없이 Logback(`loki-logback-appender`)이 Loki로 직접 push (서비스가
 > 컨테이너가 아니라 호스트에서 떠 있어 파일 tail 방식보다 이 방식이 단순함). 분산 추적은 Micrometer Tracing(OTel 브릿지)이 OTLP로
 > Tempo에 직접 push — event-service가 결제 금액 검증을 위해 search-service를 호출하는 구간이 실제로 하나의 트레이스 안에
 > 두 서비스 스팬으로 이어지는 것까지 확인함. 로그 본문에 `trace_id`를 노출해 Grafana에서 로그 ↔ 트레이스 양방향 점프가 가능함.
 > Grafana가 자동 프로비저닝된 대시보드(`observability/grafana/dashboards/msa-golden-signals.json`)로 요청 처리량 · 에러율 ·
 > p95 지연시간 · JVM 힙 사용량 · 최근 로그를 한 화면에서 보여줌.
+>
+> **클러스터 배포:** `monitoring` 네임스페이스에 `kube-prometheus-stack`(Prometheus+Grafana), `loki`, `tempo`를 각각 Helm으로 설치.
+> `dev` 네임스페이스의 3개 서비스는 `ServiceMonitor`로 자동 스크래핑되고, Loki push 주소/OTLP 엔드포인트는 `LOKI_PUSH_URL` /
+> `OTLP_TRACING_ENDPOINT` 환경변수로 주입(로컬 실행 시 기본값은 `localhost`라 로컬 개발엔 영향 없음). 로그·트레이스 저장은
+> `aws-ebs-csi-driver` 기반 EBS PVC(gp2, 5Gi)로 영구 저장되어 파드가 재시작돼도 유실되지 않음. 관련 설정은 `observability/k8s/`에 있음.
 
 ---
 
 ## ✅ 5. 구현 현황 (Implementation Status)
 
-전체 목표 대비 현재 어디까지 되어 있는지를 정리한 표입니다. (최종 갱신: 2026-07-06)
+전체 목표 대비 현재 어디까지 되어 있는지를 정리한 표입니다. (최종 갱신: 2026-07-24)
 
 | 영역 | 항목 | 상태 |
 | :--- | :--- | :--- |
@@ -87,19 +92,22 @@
 | **예약** | 선착순 재고 관리 (Redis 원자 연산, 오버셀 방지, 인당 구매 제한) | ✅ 완료 |
 | **예약** | 예약 취소 (일반 예약만, 체크인 하루 전까지) + 마이페이지 취소 버튼 연동 | ✅ 완료 |
 | **예약** | 결제 금액 서버 측 검증 (search-service 실호출로 재계산) | ✅ 완료 |
+| **예약** | 대기열 시스템 (Redis Sorted Set + Lua 원자 승격, 선착순 특가 트래픽 완충) | ✅ 완료 |
+| **예약** | 대기열 ↔ 예약 API 강제 연동 (입장 토큰 검증, 구매 성공 시 슬롯 즉시 반납) | ✅ 완료 |
 | **인프라** | 로컬 Docker Compose (Postgres + Redis + Prometheus + Grafana + Loki + Tempo) | ✅ 완료 |
-| **인프라** | K8s 매니페스트 / Helm / ArgoCD GitOps | ⬜ 미착수 |
-| **인프라** | CI/CD (GitHub Actions) | ⬜ 미착수 |
+| **인프라** | K8s 매니페스트 / Helm / ArgoCD GitOps (EKS `dev`/`prod`) | ✅ 완료 |
+| **인프라** | CI/CD (GitHub Actions, 서비스별 변경 감지 빌드 + ECR push + Trivy 스캔) | ✅ 완료 |
 | **Observability** | 메트릭 (Micrometer + Prometheus, 3개 서비스 전체) | ✅ 완료 |
 | **Observability** | Grafana 대시보드 (요청량·에러율·p95·JVM 힙·로그, 자동 프로비저닝) | ✅ 완료 |
 | **Observability** | 로그 (Loki, Logback → 직접 push) | ✅ 완료 |
 | **Observability** | 분산 추적 (Micrometer Tracing + OTel + Tempo, 서비스 간 전파 확인) | ✅ 완료 |
 | **Observability** | 로그 ↔ 트레이스 상호 점프 (Grafana derivedFields / tracesToLogsV2) | ✅ 완료 |
-| **Observability** | Alertmanager 런북 | ⬜ 미착수 |
+| **Observability** | 클러스터(dev) 배포 (kube-prometheus-stack/Loki/Tempo + ServiceMonitor + EBS PVC 영구 저장) | ✅ 완료 |
+| **Observability** | Alertmanager + Slack 알림 연동 | 🚧 코드 merge 완료, 클러스터 배포(`enabled: false`)는 아직 |
 | **알림** | notice-service (비동기 알림, 트레이스 전파 검증) | ⬜ 미착수 — 메시지 큐 선정부터 필요 |
-| **부하 테스트** | K6 시나리오 | ⬜ 미착수 |
+| **부하 테스트** | K6 시나리오 (특가 오픈 피크 트래픽 재현) | ✅ 완료 |
 
-> 로컬에서 회원가입 → 로그인 → 호텔 검색(키워드/정렬) → 특가 예약(재고 차감 포함) → 마이페이지까지 전 구간을 브라우저에서 실제로 실행/검증했고, Observability 3축(메트릭·로그·트레이싱) 모두 Grafana 한 화면에서 실시간 확인됩니다. 다음 단계는 K6 부하 테스트 또는 인프라(K8s/CI-CD)입니다.
+> 로컬 + 실제 EKS 클러스터 양쪽에서 회원가입 → 로그인 → 호텔 검색(키워드/정렬) → 특가 예약(대기열 통과 → 입장 토큰 검증 → 재고 차감 포함) → 마이페이지까지 전 구간을 실제로 실행/검증했고, Observability 3축(메트릭·로그·트레이싱) 모두 Grafana 한 화면에서 실시간 확인됩니다. 다음 단계는 Alertmanager 클러스터 배포와 notice-service입니다.
 
 ---
 
@@ -110,20 +118,31 @@ hotel-booking-o11y-integrated/
 ├── apps/                         # 마이크로서비스 애플리케이션 소스 코드
 │   ├── hotel-frontend/           # Next.js 프론트엔드 웹 앱 (포트 3000)
 │   ├── user-service/             # 회원가입/로그인/로그아웃 (포트 8083)
-│   ├── event-service/            # 예약 생성/조회, 선착순 재고 관리 (포트 8084)
+│   ├── event-service/            # 예약 생성/조회, 선착순 재고 관리, 대기열 (포트 8084)
 │   └── search-service/           # 호텔 조회 서비스 (포트 8085)
-├── observability/                # 관찰성 인프라 설정 (메트릭·로그·트레이싱 모두 구현)
-│   ├── prometheus/prometheus.yml         # 3개 서비스 스크래핑 설정
-│   ├── loki/loki-config.yaml              # 로그 저장소 설정 (filesystem, 단일 프로세스)
-│   ├── tempo/tempo.yaml                   # 트레이스 저장소 설정 (OTLP 수신, filesystem)
-│   └── grafana/
-│       ├── provisioning/                 # 데이터소스(Prometheus·Loki·Tempo)·대시보드 자동 등록, 로그↔트레이스 연동
-│       └── dashboards/msa-golden-signals.json
+├── observability/                # 관찰성 인프라 설정 (메트릭·로그·트레이싱 모두 구현, 로컬+클러스터)
+│   ├── prometheus/prometheus.yml         # 로컬용 스크래핑 설정
+│   ├── loki/loki-config.yaml              # 로컬용 로그 저장소 설정 (filesystem, 단일 프로세스)
+│   ├── tempo/tempo.yaml                   # 로컬용 트레이스 저장소 설정 (OTLP 수신, filesystem)
+│   ├── grafana/
+│   │   ├── provisioning/                 # 데이터소스(Prometheus·Loki·Tempo)·대시보드 자동 등록, 로그↔트레이스 연동
+│   │   └── dashboards/msa-golden-signals.json
+│   └── k8s/                              # EKS `dev` 클러스터용 Helm values / ServiceMonitor / ConfigMap
+│       ├── kube-prometheus-stack-values.yaml
+│       ├── loki-values.yaml
+│       ├── tempo-values.yaml
+│       ├── app-service-monitor.yaml
+│       ├── grafana-dashboard-configmap.yaml
+│       └── grafana-datasources-configmap.yaml
+├── charts/hotel/                 # 애플리케이션 배포용 Helm 차트 (ArgoCD가 values-dev.yaml/values-prod.yaml로 배포)
+├── argocd/                       # ArgoCD Application 매니페스트 (dev는 joon 브랜치, prod는 main 브랜치 추적)
+├── .github/workflows/            # GitHub Actions CI/CD (cicd-dev.yaml, cicd-prod.yaml)
+├── load-test/k6/flash-sale-burst.js   # 특가 오픈 피크 트래픽 재현 K6 스크립트
 └── docker-compose.yml            # 로컬 개발용 Postgres + Redis + Prometheus + Grafana + Loki + Tempo
 
 ```
 
-> `infra/`(K8s·Helm), `load-test/`(K6), `notice-service/`는 아직 만들어지지 않았습니다. `observability/`는 메트릭·로그·트레이싱 3축 모두 구현되어 있습니다.
+> `notice-service/`는 아직 만들어지지 않았습니다. `observability/`는 메트릭·로그·트레이싱 3축 모두 로컬과 EKS `dev` 클러스터 양쪽에 구현되어 있습니다.
 
 ## 📊 7. 핵심 모니터링 및 알림 설계 (SLO & Alerts)
 ```text

@@ -7,6 +7,7 @@ import com.hotel.event_service.repository.EventDealRepository;
 import com.hotel.event_service.security.JwtTokenProvider;
 import com.hotel.event_service.service.InventoryService;
 import com.hotel.event_service.service.PricingService;
+import com.hotel.event_service.service.QueueService;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -28,19 +29,22 @@ public class BookingController {
     private final InventoryService inventoryService;
     private final PricingService pricingService;
     private final JwtTokenProvider jwtTokenProvider;
+    private final QueueService queueService;
 
     public BookingController(
             BookingRepository bookingRepository,
             EventDealRepository eventDealRepository,
             InventoryService inventoryService,
             PricingService pricingService,
-            JwtTokenProvider jwtTokenProvider
+            JwtTokenProvider jwtTokenProvider,
+            QueueService queueService
     ) {
         this.bookingRepository = bookingRepository;
         this.eventDealRepository = eventDealRepository;
         this.inventoryService = inventoryService;
         this.pricingService = pricingService;
         this.jwtTokenProvider = jwtTokenProvider;
+        this.queueService = queueService;
     }
 
     @GetMapping("/me")
@@ -68,6 +72,13 @@ public class BookingController {
         if (isEventDeal && !eventDealRepository.existsById(request.hotelId())) {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                     .body(Map.of("message", "존재하지 않는 특가 상품입니다."));
+        }
+
+        // 특가는 반드시 대기열을 통과해 입장 토큰을 받은 사람만 구매할 수 있음 — 대기열 UI를 건너뛰고
+        // 이 API를 직접 호출하는 걸 막기 위한 검증. 가격 재검증(외부 호출) 전에 걸러서 불필요한 호출도 줄임.
+        if (isEventDeal && !queueService.isValidToken(request.hotelId(), email, request.admissionToken())) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body(Map.of("message", "대기열을 통과하지 않았거나 입장이 만료되었습니다. 다시 시도해주세요."));
         }
 
         // 결제 금액이 프론트에서 조작되지 않았는지 search-service의 실제 가격으로 재검증
@@ -115,7 +126,12 @@ public class BookingController {
         );
 
         try {
-            return ResponseEntity.status(HttpStatus.CREATED).body(bookingRepository.save(booking));
+            Booking saved = bookingRepository.save(booking);
+            // 구매가 끝났으니 대기열 슬롯을 즉시 반납 (TTL 만료를 기다리지 않고 바로 다음 사람에게 자리를 넘김)
+            if (isEventDeal) {
+                queueService.release(request.hotelId(), email);
+            }
+            return ResponseEntity.status(HttpStatus.CREATED).body(saved);
         } catch (RuntimeException e) {
             // 예약 저장이 실패하면 이미 차감한 재고를 되돌림 (재고 유실 방지)
             if (isEventDeal) {
