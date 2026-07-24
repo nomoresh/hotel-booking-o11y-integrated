@@ -12,9 +12,8 @@ import java.util.concurrent.TimeUnit;
 // 특가 대기열: 동시 접속이 처리 용량(CAPACITY)을 넘으면 순서대로 대기시키고,
 // 자리가 나면 입장 토큰을 발급해 예약 API에 접근할 수 있게 한다.
 //
-// 기존 예약 생성 흐름(BookingController, InventoryService)과는 완전히 분리되어 있고,
-// 아직 어떤 기존 API도 이 서비스를 호출하지 않는다 — 예약 API가 입장 토큰을 요구하도록
-// 연결하는 건 별도 단계(2단계)로 남겨둔 의도적인 설계.
+// BookingController가 특가 구매 시 isValidToken()으로 이 토큰을 검증하고,
+// 구매 성공 시 release()로 슬롯을 반납한다.
 @Service
 public class QueueService {
 
@@ -95,8 +94,11 @@ public class QueueService {
         return token;
     }
 
-    // 예약 API가 입장 토큰을 검증할 때 쓸 수 있도록 미리 마련해둔 메서드 (아직 어디서도 호출 안 함)
+    // 예약 API(BookingController)가 특가 구매를 처리하기 전에 호출해 입장 토큰을 검증한다.
     public boolean isValidToken(String dealId, String userEmail, String token) {
+        if (token == null) {
+            return false;
+        }
         String stored = redisTemplate.opsForValue().get(tokenKey(dealId, userEmail));
         return stored != null && stored.equals(token);
     }

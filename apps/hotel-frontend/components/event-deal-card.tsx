@@ -36,7 +36,7 @@ export function EventDealCard({ deal }: { deal: ResolvedDeal }) {
     setIsWaiting(true)
   }
 
-  const handleWaitingSuccess = async () => {
+  const handleWaitingSuccess = async (admissionToken: string) => {
     setIsWaiting(false)
     try {
       const booking = await apiFetch<BookingResponse>("/api/v1/bookings", {
@@ -51,6 +51,7 @@ export function EventDealCard({ deal }: { deal: ResolvedDeal }) {
           guests: deal.deal.guests,
           totalPrice: hotel.price,
           eventDeal: true,
+          admissionToken,
         }),
       })
 

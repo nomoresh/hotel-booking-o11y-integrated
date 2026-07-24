@@ -9,8 +9,8 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.Map;
 
-// 특가 대기열 API — 기존 예약 생성(BookingController)과는 완전히 분리된 신규 기능.
-// 아직 예약 생성 API가 이 입장 토큰을 요구하지 않는다 (연결은 별도 단계로 남겨둠).
+// 특가 대기열 API. 여기서 발급된 admissionToken은 BookingController의 특가 구매 요청에
+// 그대로 실려서 검증된다.
 @RestController
 @RequestMapping("/api/v1/queue")
 public class QueueController {
