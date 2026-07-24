@@ -17,6 +17,17 @@ repositories {
 	mavenCentral()
 }
 
+// Lettuce(Redis 클라이언트)가 물고 오는 netty-codec 4.1.135.Final에 HIGH 취약점(CVE-2026-59901,
+// Bzip2Decoder 무한루프 DoS)이 있어 Trivy 스캔이 막음. netty 모듈들은 한 릴리스로 묶여서 배포되므로
+// 개별 모듈만 올리면 버전이 어긋날 수 있어, io.netty 전체를 수정 버전으로 강제 통일한다.
+configurations.all {
+	resolutionStrategy.eachDependency { details ->
+		if (details.requested.group == 'io.netty' && details.requested.name.startsWith('netty-')) {
+			details.useVersion '4.1.136.Final'
+		}
+	}
+}
+
 dependencies {
 	implementation 'org.springframework.boot:spring-boot-starter-web'
 	implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
