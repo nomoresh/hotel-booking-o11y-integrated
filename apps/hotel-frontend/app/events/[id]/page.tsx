@@ -18,7 +18,9 @@ export default function EventDetailPage({ params }: EventDetailPageProps) {
   const { id } = use(params)
   const hotel = getHotel(id)
   const [isWaiting, setIsWaiting] = useState(true)
-  const handleWaitingSuccess = () => {
+  const [admissionToken, setAdmissionToken] = useState<string | null>(null)
+  const handleWaitingSuccess = (token: string) => {
+    setAdmissionToken(token)
     setIsWaiting(false) // 대기 완료 시 대기 창을 닫고 본래 상세페이지 노출
   }
   if (!hotel) notFound()
@@ -116,14 +118,15 @@ export default function EventDetailPage({ params }: EventDetailPageProps) {
             <div>
               <div className="lg:sticky lg:top-20">
                 {/* 특가 전용 Props 주입 */}
-                <BookingPanel 
-                  hotel={hotel} 
-                  isEvent={true} 
-                  eventPrice={hotel.price} 
+                <BookingPanel
+                  hotel={hotel}
+                  isEvent={true}
+                  eventPrice={hotel.price}
                   eventCheckIn="2026-07-15"
                   eventCheckOut="2026-07-16"
                   eventGuests={2}
                   eventNights={1}
+                  admissionToken={admissionToken}
                 />
               </div>
             </div>

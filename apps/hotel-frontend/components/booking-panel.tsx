@@ -27,9 +27,10 @@ interface BookingPanelProps {
   eventCheckOut?: string  // 고정 체크아웃 날짜
   eventGuests?: number    // 고정 인원
   eventNights?: number    // 고정 박수
+  admissionToken?: string | null  // 특가 모드일 때 대기열 통과로 발급받은 입장 토큰
 }
 
-export function BookingPanel({ 
+export function BookingPanel({
   hotel,
   isEvent = false,
   eventPrice,
@@ -37,6 +38,7 @@ export function BookingPanel({
   eventCheckOut = "2026-07-16",
   eventGuests = 2,
   eventNights = 1,
+  admissionToken = null,
 }: BookingPanelProps) {
   const router = useRouter()
   const { user } = useAuth()
@@ -106,6 +108,7 @@ export function BookingPanel({
           guests: finalGuests,
           totalPrice: total,
           eventDeal: isEvent,
+          admissionToken,
         }),
       })
 

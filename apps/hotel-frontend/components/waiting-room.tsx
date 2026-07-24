@@ -7,7 +7,7 @@ import { apiFetch } from "@/lib/api"
 interface WaitingRoomProps {
   isOpen: boolean
   dealId: string
-  onSuccess: () => void
+  onSuccess: (admissionToken: string) => void
 }
 
 interface QueueStatusResponse {
@@ -57,10 +57,11 @@ export function WaitingRoom({ isOpen, dealId, onSuccess }: WaitingRoomProps) {
   }, [isOpen, dealId])
 
   // 승격(ADMITTED) 감지: onSuccess는 여기서 정확히 한 번만 호출
+  // 발급받은 admissionToken을 그대로 넘겨서, 예약 API 호출 시 "대기열을 통과했다"는 증거로 쓰게 한다.
   useEffect(() => {
-    if (isOpen && status?.state === "ADMITTED" && !hasFinishedRef.current) {
+    if (isOpen && status?.state === "ADMITTED" && status.admissionToken && !hasFinishedRef.current) {
       hasFinishedRef.current = true
-      onSuccess()
+      onSuccess(status.admissionToken)
     }
   }, [isOpen, status, onSuccess])
 
