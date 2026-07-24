@@ -53,7 +53,7 @@
 - **`hotel-frontend` (Next.js):** 특가 상품 노출 및 실시간 예약 대시보드 UI. *(포트 3000)*
 - **`user-service`:** 회원가입/로그인/로그아웃. BCrypt 비밀번호 해싱, JWT를 HttpOnly 쿠키로 발급. *(포트 8083)*
 - **`search-service`:** 호텔 및 리조트 정보 조회. 지역/키워드/가격대/평점 조건별 검색과 정렬을 지원하며, 검색 결과는 Caffeine 기반 인메모리 캐시(TTL 5분)로 응답. 프론트 `/search` 페이지가 실제로 이 API를 호출하며, 응답받은 `id`를 프론트의 정적 호텔 데이터(이미지·태그 등 상세 정보)와 매칭해 화면을 구성함. *(포트 8085)*
-- **`event-service`:** 예약 생성/조회/취소 및 특가 선착순 재고 관리. Redis 원자 연산(Lua 스크립트)으로 재고 초과 판매 방지, 인당 구매 개수 제한. 예약 생성 시 search-service를 호출해 결제 금액을 서버가 직접 재계산·검증(클라이언트 조작 방지, search-service 장애 시 503) — 이 호출은 분산 트레이싱으로 두 서비스가 하나의 트레이스에 묶여 추적됨. 예약 취소는 일반 예약만 체크인 하루 전까지 가능하며 특가 상품은 취소 불가. *(포트 8084)*
+- **`event-service`:** 예약 생성/조회/취소 및 특가 선착순 재고 관리. Redis 원자 연산(Lua 스크립트)으로 재고 초과 판매 방지, 인당 구매 개수 제한. 예약 생성 시 search-service를 호출해 결제 금액을 서버가 직접 재계산·검증(클라이언트 조작 방지, search-service 장애 시 503) — 이 호출은 분산 트레이싱으로 두 서비스가 하나의 트레이스에 묶여 추적됨. 예약 취소는 일반 예약만 체크인 하루 전까지 가능하며 특가 상품은 취소 불가. 특가 구매는 대기열(Redis Sorted Set + Lua 원자 승격)을 통과해 발급받은 입장 토큰을 서버가 검증해야만 처리되며, 대기열 UI를 건너뛰고 API를 직접 호출하는 것은 차단됨. *(포트 8084)*
 - **`notice-service`:** 예약 완료 후 비동기로 알림 전송 (분산 추적 컨텍스트 전파 검증용). *(계획 단계, 메시지 큐 선정부터 필요 — 아직 미착수)*
 
 ### 📊 [2] Observability 통합 흐름 (O11y Pipeline)
@@ -78,7 +78,7 @@
 
 ## ✅ 5. 구현 현황 (Implementation Status)
 
-전체 목표 대비 현재 어디까지 되어 있는지를 정리한 표입니다. (최종 갱신: 2026-07-23)
+전체 목표 대비 현재 어디까지 되어 있는지를 정리한 표입니다. (최종 갱신: 2026-07-24)
 
 | 영역 | 항목 | 상태 |
 | :--- | :--- | :--- |
@@ -93,6 +93,7 @@
 | **예약** | 예약 취소 (일반 예약만, 체크인 하루 전까지) + 마이페이지 취소 버튼 연동 | ✅ 완료 |
 | **예약** | 결제 금액 서버 측 검증 (search-service 실호출로 재계산) | ✅ 완료 |
 | **예약** | 대기열 시스템 (Redis Sorted Set + Lua 원자 승격, 선착순 특가 트래픽 완충) | ✅ 완료 |
+| **예약** | 대기열 ↔ 예약 API 강제 연동 (입장 토큰 검증, 구매 성공 시 슬롯 즉시 반납) | ✅ 완료 |
 | **인프라** | 로컬 Docker Compose (Postgres + Redis + Prometheus + Grafana + Loki + Tempo) | ✅ 완료 |
 | **인프라** | K8s 매니페스트 / Helm / ArgoCD GitOps (EKS `dev`/`prod`) | ✅ 완료 |
 | **인프라** | CI/CD (GitHub Actions, 서비스별 변경 감지 빌드 + ECR push + Trivy 스캔) | ✅ 완료 |
@@ -102,11 +103,11 @@
 | **Observability** | 분산 추적 (Micrometer Tracing + OTel + Tempo, 서비스 간 전파 확인) | ✅ 완료 |
 | **Observability** | 로그 ↔ 트레이스 상호 점프 (Grafana derivedFields / tracesToLogsV2) | ✅ 완료 |
 | **Observability** | 클러스터(dev) 배포 (kube-prometheus-stack/Loki/Tempo + ServiceMonitor + EBS PVC 영구 저장) | ✅ 완료 |
-| **Observability** | Alertmanager 런북 | ⬜ 미착수 |
+| **Observability** | Alertmanager + Slack 알림 연동 | 🚧 코드 merge 완료, 클러스터 배포(`enabled: false`)는 아직 |
 | **알림** | notice-service (비동기 알림, 트레이스 전파 검증) | ⬜ 미착수 — 메시지 큐 선정부터 필요 |
 | **부하 테스트** | K6 시나리오 (특가 오픈 피크 트래픽 재현) | ✅ 완료 |
 
-> 로컬 + 실제 EKS 클러스터 양쪽에서 회원가입 → 로그인 → 호텔 검색(키워드/정렬) → 특가 예약(대기열 → 재고 차감 포함) → 마이페이지까지 전 구간을 실제로 실행/검증했고, Observability 3축(메트릭·로그·트레이싱) 모두 Grafana 한 화면에서 실시간 확인됩니다. 다음 단계는 Alertmanager 런북과 notice-service입니다.
+> 로컬 + 실제 EKS 클러스터 양쪽에서 회원가입 → 로그인 → 호텔 검색(키워드/정렬) → 특가 예약(대기열 통과 → 입장 토큰 검증 → 재고 차감 포함) → 마이페이지까지 전 구간을 실제로 실행/검증했고, Observability 3축(메트릭·로그·트레이싱) 모두 Grafana 한 화면에서 실시간 확인됩니다. 다음 단계는 Alertmanager 클러스터 배포와 notice-service입니다.
 
 ---
 
