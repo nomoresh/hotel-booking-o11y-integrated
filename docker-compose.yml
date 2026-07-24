@@ -8,7 +8,7 @@ services:
       POSTGRES_USER: hotel
       POSTGRES_PASSWORD: hotel1234
     ports:
-      - "5433:5432" # 호스트 5432는 다른 프로젝트(sprint-log-db)가 사용 중이라 5433으로 매핑
+      - "5433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -33,14 +33,26 @@ services:
     image: prom/prometheus:v3.13.0
     container_name: hotel-prometheus
     restart: unless-stopped
-    # 백엔드 3개는 컨테이너가 아니라 호스트에서 ./gradlew bootRun으로 직접 떠 있으므로
-    # host.docker.internal로 호스트에 접근함 (Linux에서는 extra_hosts가 필요, Mac/Windows Docker Desktop은 기본 지원)
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes:
       - ./observability/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./observability/prometheus/rules:/etc/prometheus/rules:ro
     ports:
       - "9090:9090"
+
+  alertmanager:
+    image: prom/alertmanager:v0.27.0
+    container_name: hotel-alertmanager
+    restart: unless-stopped
+    env_file:
+      - .env
+    volumes:
+      - ./observability/alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+    ports:
+      - "9093:9093"
+    command:
+      - '--config.file=/etc/alertmanager/alertmanager.yml'
 
   loki:
     image: grafana/loki:3.7.3
@@ -50,7 +62,7 @@ services:
       - ./observability/loki/loki-config.yaml:/etc/loki/local-config.yaml:ro
       - loki_data:/loki
     ports:
-      - "3100:3100" # 백엔드 서비스가 호스트에서 직접 이 포트로 로그를 push함
+      - "3100:3100"
     command: -config.file=/etc/loki/local-config.yaml
 
   tempo:
@@ -62,9 +74,9 @@ services:
       - ./observability/tempo/tempo.yaml:/etc/tempo/tempo.yaml:ro
       - tempo_data:/var/tempo
     ports:
-      - "3200:3200"   # Tempo 자체 쿼리 API
-      - "4317:4317"   # OTLP gRPC 수신
-      - "4318:4318"   # OTLP HTTP 수신 (백엔드 서비스가 호스트에서 직접 이 포트로 trace를 push함)
+      - "3200:3200"
+      - "4317:4317"
+      - "4318:4318"
 
   grafana:
     image: grafana/grafana:12.3.8
@@ -82,7 +94,7 @@ services:
       - ./observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
       - grafana_data:/var/lib/grafana
     ports:
-      - "3001:3000" # 프론트엔드가 이미 3000을 쓰고 있어 3001로 매핑
+      - "3001:3000"
 
 volumes:
   postgres_data:

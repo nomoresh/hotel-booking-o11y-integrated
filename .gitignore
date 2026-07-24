@@ -21,6 +21,7 @@
 
 # OS
 .DS_Store
+
 # Terraform 다운로드 파일
 .terraform/
 
@@ -42,4 +43,8 @@ crash.*.log
 # 임시 잠금 파일
 .terraform.tfstate.lock.info
 
+# 로그
 logs/
+
+# Gradle 빌드 산출물
+**/bin/
