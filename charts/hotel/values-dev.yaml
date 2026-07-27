@@ -25,10 +25,10 @@ serviceDefaults:
   probes:
     enabled: true
     path: /actuator/health
-    initialDelaySeconds: 30
+    initialDelaySeconds: 45
     periodSeconds: 10
     timeoutSeconds: 3
-    failureThreshold: 3
+    failureThreshold: 6
   hpa:
     enabled: true
     minReplicas: 1
