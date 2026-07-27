@@ -58,6 +58,12 @@ services:
     port: 8084
     env:
       SEARCH_SERVICE_BASE_URL: "http://hotel-svc-search:8085"
+  notice:
+    enabled: true
+    name: hotel-svc-notice
+    imageName: hotel-svc-notice
+    imageTag: "pending"
+    port: 8086
   frontend:
     enabled: true
     appType: frontend

@@ -1,4 +1,4 @@
-# dev 네임스페이스의 3개 백엔드 서비스(user/search/event)를 Prometheus가 스크래핑하도록 등록.
+# dev 네임스페이스의 4개 백엔드 서비스(user/search/event/notice)를 Prometheus가 스크래핑하도록 등록.
 # 서비스마다 실제로 쓰는 포트 하나씩만 정확히 매칭 (서비스 포트에 이름이 없어서 targetPort 숫자로 매칭).
 apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor
@@ -54,5 +54,24 @@ spec:
       app: hotel-svc-event
   endpoints:
     - targetPort: 8084
+      path: /actuator/prometheus
+      interval: 15s
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: hotel-svc-notice
+  namespace: monitoring
+  labels:
+    release: kube-prometheus-stack
+spec:
+  namespaceSelector:
+    matchNames:
+      - dev
+  selector:
+    matchLabels:
+      app: hotel-svc-notice
+  endpoints:
+    - targetPort: 8086
       path: /actuator/prometheus
       interval: 15s
