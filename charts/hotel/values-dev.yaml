@@ -60,7 +60,7 @@ services:
     enabled: true
     name: hotel-svc-event
     imageName: hotel-svc-event
-    imageTag: "2cd1ed9"
+    imageTag: "24a6676"
     port: 8084
     env:
       SEARCH_SERVICE_BASE_URL: "http://hotel-svc-search:8085"
@@ -70,7 +70,7 @@ services:
     enabled: true
     name: hotel-svc-notice
     imageName: hotel-svc-notice
-    imageTag: "pending"
+    imageTag: "24a6676"
     port: 8086
     env:
       LOKI_PUSH_URL: "http://loki.monitoring.svc.cluster.local:3100/loki/api/v1/push"
