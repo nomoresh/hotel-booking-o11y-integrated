@@ -108,10 +108,15 @@ public class BookingController {
 
         // 특가 구매인 경우에만 인당 구매 제한 확인 후 선착순 재고 확보를 시도 (일반 예약은 통과)
         if (isEventDeal && bookingRepository.existsByUserEmailAndHotelIdAndEventDealTrue(email, request.hotelId())) {
+            // 더 이상 진행할 수 없는 사용자이므로 TTL 만료를 기다리지 않고 대기열 슬롯을 바로 반납
+            queueService.release(request.hotelId(), email);
             return ResponseEntity.status(HttpStatus.CONFLICT)
                     .body(Map.of("message", "이 특가 상품은 인당 1개까지만 구매할 수 있습니다."));
         }
         if (isEventDeal && !inventoryService.tryReserve(request.hotelId())) {
+            // 매진도 더 이상 진행할 수 없는 상태이므로 슬롯을 바로 반납해야 뒷사람이 승격될 수 있음
+            // (반납 안 하면 매진자가 TTL 5분 동안 자리를 붙잡아서 대기열이 사실상 멈춤)
+            queueService.release(request.hotelId(), email);
             return ResponseEntity.status(HttpStatus.CONFLICT)
                     .body(Map.of("message", "선착순 마감되었습니다."));
         }
@@ -145,9 +150,10 @@ public class BookingController {
             }
             return ResponseEntity.status(HttpStatus.CREATED).body(saved);
         } catch (RuntimeException e) {
-            // 예약 저장이 실패하면 이미 차감한 재고를 되돌림 (재고 유실 방지)
+            // 예약 저장이 실패하면 이미 차감한 재고를 되돌리고, 대기열 슬롯도 즉시 반납
             if (isEventDeal) {
                 inventoryService.restore(request.hotelId());
+                queueService.release(request.hotelId(), email);
             }
             throw e;
         }

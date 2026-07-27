@@ -84,14 +84,24 @@ public class QueueService {
         return QueueStatus.waiting(position, totalWaiting == null ? 0 : totalWaiting, estimatedSeconds);
     }
 
+    // get-then-set은 원자적이지 않아서, 같은 유저가 동시에 두 요청(예: 본인의 status
+    // 폴링 + 다른 유저 요청이 유발한 전역 승격 부수효과)에서 동시에 승격 처리되면
+    // 서로 다른 토큰을 만들어 마지막에 쓴 쪽이 이기는 경쟁 상태가 생김 — 클라이언트는
+    // 먼저 응답받은(하지만 나중에 덮어써진) 토큰을 들고 있다가 예약 시점에 검증 실패함.
+    // setIfAbsent(SETNX)로 "최초 성공한 쓰기만 유효"하게 만들고, 실패하면 이미 저장된
+    // 값을 그대로 읽어서 반환해 모든 호출자가 같은 토큰을 보게 한다.
     private String getOrCreateToken(String dealId, String userEmail) {
-        String existing = redisTemplate.opsForValue().get(tokenKey(dealId, userEmail));
+        String key = tokenKey(dealId, userEmail);
+        String existing = redisTemplate.opsForValue().get(key);
         if (existing != null) {
             return existing;
         }
         String token = UUID.randomUUID().toString();
-        redisTemplate.opsForValue().set(tokenKey(dealId, userEmail), token, ADMISSION_TTL_SECONDS, TimeUnit.SECONDS);
-        return token;
+        Boolean wasSet = redisTemplate.opsForValue().setIfAbsent(key, token, ADMISSION_TTL_SECONDS, TimeUnit.SECONDS);
+        if (Boolean.TRUE.equals(wasSet)) {
+            return token;
+        }
+        return redisTemplate.opsForValue().get(key);
     }
 
     // 예약 API(BookingController)가 특가 구매를 처리하기 전에 호출해 입장 토큰을 검증한다.
