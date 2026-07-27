@@ -11,6 +11,16 @@ grafana:
   service:
     type: ClusterIP
 
+# EKS는 컨트롤 플레인(controller-manager/scheduler/etcd)을 AWS가 관리해서 클러스터에서
+# 아예 안 보임 — 이 컴포넌트들을 감시하는 기본 규칙은 EKS에서 항상 거짓 CRITICAL 경보를 냄.
+# 실제로 Slack에 KubeControllerManagerDown/KubeSchedulerDown이 계속 울려서 꺼둠.
+defaultRules:
+  rules:
+    kubeControllerManager: false
+    kubeSchedulerAlerting: false
+    kubeSchedulerRecording: false
+    etcd: false
+
 prometheus:
   prometheusSpec:
     retention: 3d # 데모용 클러스터라 길게 안 가져감
@@ -26,9 +36,81 @@ prometheus:
     serviceMonitorSelectorNilUsesHelmValues: false
     podMonitorSelectorNilUsesHelmValues: false
 
-# 알림은 이번 단계에서 범위 밖 — 메트릭/Grafana부터 확인 후 필요하면 켬
+# Slack 알림 연동. 웹훅 URL은 이 파일에 절대 직접 적지 않음 — 아래 secrets에 적은 이름의
+# K8s Secret을 monitoring 네임스페이스에 미리 만들어둬야 하며(kubectl로 직접, git에는 안 올라감),
+# Alertmanager가 그 Secret을 파일로 마운트해서 읽도록 slack_api_url_file로 참조한다.
 alertmanager:
-  enabled: false
+  enabled: true
+  alertmanagerSpec:
+    secrets:
+      - alertmanager-slack-webhook
+    resources:
+      requests:
+        cpu: 25m
+        memory: 64Mi
+      limits:
+        cpu: 100m
+        memory: 128Mi
+  config:
+    global:
+      resolve_timeout: 5m
+      slack_api_url_file: /etc/alertmanager/secrets/alertmanager-slack-webhook/slack-url
+    route:
+      group_by: ['alertname', 'job']
+      group_wait: 30s
+      group_interval: 5m
+      repeat_interval: 1h
+      receiver: 'slack-alerts'
+      routes:
+        # Watchdog은 "알림 파이프라인 자체가 살아있는지" 확인용으로 항상 firing 상태인 의도된 알림 —
+        # kube-prometheus-stack 기본값도 원래 null로 보내는데, route 전체를 덮어쓰면서 빠졌던 걸 복원
+        - match:
+            alertname: Watchdog
+          receiver: 'null'
+        - match:
+            severity: critical
+          receiver: 'slack-critical'
+        - match:
+            severity: warning
+          receiver: 'slack-warning'
+    receivers:
+      - name: 'null'
+      - name: 'slack-alerts'
+        slack_configs:
+          - channel: '#hotel-alerts'
+            send_resolved: true
+            title: '[{{ .Status | toUpper }}] {{ .CommonLabels.alertname }}'
+            text: >-
+              {{ range .Alerts }}
+              *서비스:* {{ .Labels.job }}
+              *설명:* {{ .Annotations.description }}
+              {{ end }}
+      - name: 'slack-critical'
+        slack_configs:
+          - channel: '#hotel-alerts'
+            send_resolved: true
+            title: '🚨 [CRITICAL] {{ .CommonLabels.alertname }}'
+            text: >-
+              {{ range .Alerts }}
+              *서비스:* {{ .Labels.job }}
+              *설명:* {{ .Annotations.description }}
+              {{ end }}
+      - name: 'slack-warning'
+        slack_configs:
+          - channel: '#hotel-alerts'
+            send_resolved: true
+            title: '⚠️ [WARNING] {{ .CommonLabels.alertname }}'
+            text: >-
+              {{ range .Alerts }}
+              *서비스:* {{ .Labels.job }}
+              *설명:* {{ .Annotations.description }}
+              {{ end }}
+    inhibit_rules:
+      - source_matchers:
+          - 'severity = critical'
+        target_matchers:
+          - 'severity = warning'
+        equal: ['alertname', 'job']
 
 prometheusOperator:
   resources:
