@@ -110,7 +110,7 @@
 | **Observability** | 분산 추적 (Micrometer Tracing + OTel + Tempo, 서비스 간 전파 확인) | ✅ 완료 |
 | **Observability** | 로그 ↔ 트레이스 상호 점프 (Grafana derivedFields / tracesToLogsV2) | ✅ 완료 |
 | **Observability** | 클러스터(dev) 배포 (kube-prometheus-stack/Loki/Tempo + ServiceMonitor + EBS PVC 영구 저장) | ✅ 완료 |
-| **Observability** | Alertmanager + Slack 알림 연동 | ✅ 완료, 클러스터 배포 및 실제 Slack 알림 도착까지 확인 |
+| **Observability** | Alertmanager + Slack 알림 연동 | ✅ 완료 |
 | **알림** | notice-service (Redis Streams 기반 비동기 알림, 트레이스 전파 검증) | ✅ 완료 |
 | **부하 테스트** | K6 시나리오 (특가 오픈 피크 트래픽 재현, 대기열 연동 포함) | ✅ 완료 |
 
