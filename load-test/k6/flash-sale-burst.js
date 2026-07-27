@@ -12,6 +12,10 @@
 // k6 기본 지표(http_req_failed)는 비2xx를 전부 실패로 집계해서 이 케이스에 안 맞기 때문에,
 // 아래에서 성공/매진/진짜에러를 커스텀 메트릭으로 분리해서 판단한다.
 //
+// 대기열 2단계 연동(입장 토큰 검증) 이후: 특가 예약은 먼저 대기열에 진입해서
+// admissionToken을 받아야 함 — 각 VU가 실제 브라우저와 동일하게
+// join → (필요시) status 폴링 → 승격되면 그 토큰으로 구매 시도, 순서로 동작한다.
+//
 // 사전 준비:
 //   - docker compose up -d (Postgres, Redis, Observability 전체)
 //   - 3개 백엔드 서비스 기동 (user/search/event-service)
@@ -26,7 +30,7 @@
 //   docker exec hotel-redis redis-cli SET event:stock:seaside-jeju 20
 
 import http from "k6/http"
-import { check } from "k6"
+import { check, sleep } from "k6"
 import { Counter, Rate } from "k6/metrics"
 
 const USER_SERVICE = __ENV.USER_SERVICE_URL || "http://localhost:8083"
@@ -34,13 +38,19 @@ const SEARCH_SERVICE = __ENV.SEARCH_SERVICE_URL || "http://localhost:8085"
 const EVENT_SERVICE = __ENV.EVENT_SERVICE_URL || "http://localhost:8084"
 const DEAL_ID = __ENV.DEAL_ID || "urban-seoul" // 기본: 재고 30개짜리 특가
 
-const VU_COUNT = 1000 // 평시 100명의 10배 버스트 가정
+const VU_COUNT = Number(__ENV.VU_COUNT) || 1000 // 평시 100명의 10배 버스트 가정 (스모크 테스트 시 -e VU_COUNT=10 등으로 축소 가능)
 const SIGNUP_BATCH_SIZE = 50 // 회원가입 시 bcrypt 해싱 부하를 나눠서 처리하기 위한 배치 크기
 
-// 성공/매진/진짜에러를 구분해서 집계하는 커스텀 메트릭
+// 대기열 정원(QueueService.CAPACITY=50)보다 훨씬 많은 인원이 몰리므로, 승격될 때까지
+// 폴링하며 기다리는 시간을 넉넉히 잡아야 함 (poll 간격 0.3초 x 최대 100회 = 최대 30초 대기)
+const QUEUE_POLL_INTERVAL_SECONDS = 0.3
+const QUEUE_MAX_POLLS = 100
+
+// 성공/매진/진짜에러/대기열 타임아웃을 구분해서 집계하는 커스텀 메트릭
 const bookingSuccess = new Counter("booking_success")
 const bookingSoldOut = new Counter("booking_sold_out")
 const bookingUnexpectedError = new Rate("booking_unexpected_error")
+const queueAdmissionTimeout = new Rate("queue_admission_timeout") // 대기열 승격 자체를 못 받은 비율
 
 export const options = {
   scenarios: {
@@ -48,7 +58,7 @@ export const options = {
       executor: "per-vu-iterations",
       vus: VU_COUNT,
       iterations: 1, // 가상 유저 1명당 "오픈 순간 딱 한 번" 구매 시도
-      maxDuration: "30s",
+      maxDuration: "90s", // 대기열 승격 대기 시간까지 포함해서 넉넉히 잡음
     },
   },
   thresholds: {
@@ -109,9 +119,33 @@ export function setup() {
   return { basePrice, cookies }
 }
 
+// 대기열에 진입해서 승격될 때까지 폴링 — 실제 브라우저(WaitingRoom)가 하는 것과 동일한 흐름.
+// 반환값이 null이면 테스트 종료 시간 안에 승격을 못 받은 것(대기열 자체가 밀린 것이지 장애가 아님).
+function joinQueueAndWaitForAdmission(cookie) {
+  const headers = { "Content-Type": "application/json", Cookie: cookie }
+
+  let res = http.post(`${EVENT_SERVICE}/api/v1/queue/${DEAL_ID}/join`, null, { headers })
+  let status = res.json()
+
+  for (let i = 0; i < QUEUE_MAX_POLLS && status.state !== "ADMITTED"; i++) {
+    sleep(QUEUE_POLL_INTERVAL_SECONDS)
+    res = http.get(`${EVENT_SERVICE}/api/v1/queue/${DEAL_ID}/status`, { headers })
+    status = res.json()
+  }
+
+  return status.state === "ADMITTED" ? status.admissionToken : null
+}
+
 // 각 가상 유저(VU)가 실행하는 실제 부하 — "특가 구매 버튼 클릭 한 번"
 export default function (data) {
   const cookie = data.cookies[__VU - 1]
+
+  const admissionToken = joinQueueAndWaitForAdmission(cookie)
+  if (admissionToken === null) {
+    queueAdmissionTimeout.add(true)
+    return
+  }
+  queueAdmissionTimeout.add(false)
 
   const payload = JSON.stringify({
     hotelId: DEAL_ID,
@@ -123,6 +157,7 @@ export default function (data) {
     guests: 2,
     totalPrice: data.basePrice, // 특가는 nights/guests와 무관하게 basePrice 그대로
     eventDeal: true,
+    admissionToken,
   })
 
   const res = http.post(`${EVENT_SERVICE}/api/v1/bookings`, payload, {
@@ -149,5 +184,8 @@ export function teardown() {
   )
   console.log(
     `      booking_success 카운트가 재고 수량(예: urban-seoul=30)과 정확히 일치해야 오버셀 0건입니다.`,
+  )
+  console.log(
+    `      queue_admission_timeout 비율이 높다면 대기열 정원(50) 대비 대기 인원이 많아 승격이 못 따라간 것 — 장애가 아니라 폴링 시간(QUEUE_MAX_POLLS)을 늘려야 하는 신호입니다.`,
   )
 }
