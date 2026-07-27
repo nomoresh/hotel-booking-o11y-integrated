@@ -42,8 +42,20 @@ spec:
             description: "{{ $labels.job }}의 p95 응답시간이 {{ $value | humanizeDuration }} 입니다. (임계치: 200ms)"
 
         # 서비스 다운 감지
+        # min by(job)로 집계하는 이유: 집계 없이 up==0만 쓰면 파드가 재시작되며
+        # pod/instance 라벨이 바뀔 때마다 별개의 알림 인스턴스로 취급되어 "for" 타이머가
+        # 매번 리셋됨(실제로 장애 주입 리허설 중 발견) — job 단위로 집계해야 파드 교체와
+        # 무관하게 지속 시간이 누적됨.
+        # absent(...) 절이 추가로 필요한 이유: 레플리카가 0이 되면(예: 장애 주입으로 스케일
+        # 다운) 스크래핑 대상 자체가 사라져서 up 시계열이 "0"이 아니라 "없음"이 되어 위 조건에
+        # 안 걸림 — 대상이 아예 없어진 경우도 다운으로 간주하도록 별도로 묶음.
         - alert: ServiceDown
-          expr: up{job=~"hotel-svc-.*"} == 0
+          expr: |
+            (min by (job) (up{job=~"hotel-svc-.*"}) == 0)
+            or absent(up{job="hotel-svc-user"})
+            or absent(up{job="hotel-svc-search"})
+            or absent(up{job="hotel-svc-event"})
+            or absent(up{job="hotel-svc-notice"})
           for: 1m
           labels:
             severity: critical
