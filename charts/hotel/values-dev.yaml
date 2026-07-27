@@ -62,7 +62,7 @@ services:
     enabled: true
     name: hotel-svc-event
     imageName: hotel-svc-event
-    imageTag: "24a6676"
+    imageTag: "1462d06"
     port: 8084
     env:
       SEARCH_SERVICE_BASE_URL: "http://hotel-svc-search:8085"
