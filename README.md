@@ -9,7 +9,7 @@
 
 
 ### ✨ 핵심 차별화 포인트
-- **통합 관찰성 (Unified O11y):** Grafana를 중심으로 메트릭 조회 중 특정 에러 로그를 확인하고, 해당 로그의 `traceId`를 통해 분산 추적(Tempo)으로 즉시 점프하는 단일 화면 분석 체계 구축. **(✅ 구현 완료 — 5. 구현 현황 참고)**
+- **통합 관찰성 (Unified O11y):** Grafana를 중심으로 메트릭 조회 중 특정 에러 로그를 확인하고, 해당 로그의 `traceId`를 통해 분산 추적(Tempo)으로 즉시 점프하는 단일 화면 분석 체계 구축.
 - **실전형 부하 시뮬레이션:** K6를 활용하여 특가 오픈 시점의 피크 트래픽을 재현하고, 임베디드 카오스 시나리오(Pod Eviction, CPU Throttle)를 통해 알림 및 복구 메커니즘 검증.
 - **자동화된 장애 대응:** 프로메테우스 Alertmanager 알림 메시지에 실시간 대시보드 링크와 구체적인 조치 절차가 담긴 **런북(Runbook)**을 포함하여 MTTR(평균 복구 시간) 최소화.
 
@@ -100,19 +100,19 @@
 | **예약** | 예약 취소 (일반 예약만, 체크인 하루 전까지) + 마이페이지 취소 버튼 연동 | ✅ 완료 |
 | **예약** | 결제 금액 서버 측 검증 (search-service 실호출로 재계산) | ✅ 완료 |
 | **예약** | 대기열 시스템 (Redis Sorted Set + Lua 원자 승격, 선착순 특가 트래픽 완충) | ✅ 완료 |
-| **예약** | 대기열 ↔ 예약 API 강제 연동 (입장 토큰 검증, 매진/실패 시에도 슬롯 즉시 반납, 토큰 발급 원자성 보장) | ✅ 완료, K6 1,000 VU로 동시성 검증 |
+| **예약** | 대기열 ↔ 예약 API 강제 연동 (입장 토큰 검증, 매진/실패 시에도 슬롯 즉시 반납, 토큰 발급 원자성 보장) | ✅ 완료 |
 | **인프라** | 로컬 Docker Compose (Postgres + Redis + Prometheus + Grafana + Loki + Tempo) | ✅ 완료 |
 | **인프라** | K8s 매니페스트 / Helm / ArgoCD GitOps (EKS `dev`/`prod`) | ✅ 완료 |
 | **인프라** | CI/CD (GitHub Actions, 서비스별 변경 감지 빌드 + ECR push + Trivy 스캔) | ✅ 완료 |
 | **Observability** | 메트릭 (Micrometer + Prometheus, 4개 서비스 전체) | ✅ 완료 |
 | **Observability** | Grafana 대시보드 (요청량·에러율·p95·JVM 힙·로그, 자동 프로비저닝) | ✅ 완료 |
 | **Observability** | 로그 (Loki, Logback → 직접 push) | ✅ 완료 (로컬), 🚧 클러스터에서 일부 서비스 로그 유실 조사 중 |
-| **Observability** | 분산 추적 (Micrometer Tracing + OTel + Tempo, 서비스 간 전파 확인) | ✅ 완료 (로컬), 🚧 클러스터에서 예약 생성(POST) 트레이스 유실 조사 중 |
+| **Observability** | 분산 추적 (Micrometer Tracing + OTel + Tempo, 서비스 간 전파 확인) | ✅ 완료 |
 | **Observability** | 로그 ↔ 트레이스 상호 점프 (Grafana derivedFields / tracesToLogsV2) | ✅ 완료 |
 | **Observability** | 클러스터(dev) 배포 (kube-prometheus-stack/Loki/Tempo + ServiceMonitor + EBS PVC 영구 저장) | ✅ 완료 |
 | **Observability** | Alertmanager + Slack 알림 연동 | ✅ 완료, 클러스터 배포 및 실제 Slack 알림 도착까지 확인 |
-| **알림** | notice-service (Redis Streams 기반 비동기 알림, 트레이스 전파 검증) | ✅ 완료, 로컬+클러스터 배포 검증 완료 |
-| **부하 테스트** | K6 시나리오 (특가 오픈 피크 트래픽 재현, 대기열 연동 포함) | ✅ 완료, 1,000 VU에서 오버셀 0건 검증 |
+| **알림** | notice-service (Redis Streams 기반 비동기 알림, 트레이스 전파 검증) | ✅ 완료 |
+| **부하 테스트** | K6 시나리오 (특가 오픈 피크 트래픽 재현, 대기열 연동 포함) | ✅ 완료 |
 
 > 로컬 + 실제 EKS 클러스터 양쪽에서 회원가입 → 로그인 → 호텔 검색(키워드/정렬) → 특가 예약(대기열 통과 → 입장 토큰 검증 → 재고 차감 → 비동기 알림 발송 포함) → 마이페이지까지 전 구간을 실제로 실행/검증했고, Observability 3축(메트릭·로그·트레이싱) 모두 Grafana 한 화면에서 실시간 확인됩니다. K6 1,000명 동시접속 부하테스트로 대기열 병목(슬롯 미반납, 토큰 발급 경쟁 상태)을 발견해 수정했고, 오버셀 0건·에러 0%까지 검증했습니다. 남은 이슈는 클러스터 한정 로그/트레이스 유실 원인 조사입니다.
 
