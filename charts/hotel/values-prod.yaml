@@ -44,6 +44,9 @@ services:
     imageName: hotel-svc-user
     imageTag: "19d413d"
     port: 8083
+    env:
+      # ALB가 HTTP만 지원해서 Secure 쿠키를 켜두면 로그인 자체가 안 됨 (브라우저가 저장/전송을 거부)
+      COOKIE_SECURE: "false"
   search:
     enabled: true
     name: hotel-svc-search

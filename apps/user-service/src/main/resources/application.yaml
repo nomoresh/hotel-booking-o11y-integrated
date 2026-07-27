@@ -6,6 +6,11 @@ server:
 cors:
   allowed-origins: http://localhost:3000,http://k8s-dev-hoteling-349b0ab528-48488193.ap-northeast-2.elb.amazonaws.com
 
+# Secure 쿠키는 HTTPS에서만 브라우저가 저장/전송함. localhost는 브라우저가 예외로 봐줘서 기본값(true)
+# 그대로 로컬 개발엔 문제없지만, ALB가 아직 HTTP만 지원하는 클러스터 환경에서는 COOKIE_SECURE=false로 꺼야 함.
+cookie:
+  secure: ${COOKIE_SECURE:true}
+
 spring:
   application:
     name: user-service
