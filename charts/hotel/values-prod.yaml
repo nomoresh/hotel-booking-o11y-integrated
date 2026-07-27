@@ -57,7 +57,7 @@ services:
     enabled: true
     name: hotel-svc-event
     imageName: hotel-svc-event
-    imageTag: "3de9ce5"
+    imageTag: "d0514d2"
     port: 8084
     env:
       SEARCH_SERVICE_BASE_URL: "http://hotel-svc-search:8085"
@@ -72,7 +72,7 @@ services:
     appType: frontend
     name: hotel-frontend
     imageName: hotel-frontend
-    imageTag: "46397c2"
+    imageTag: "515a4a2"
     port: 3000
     probes:
       enabled: true
