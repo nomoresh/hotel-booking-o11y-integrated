@@ -82,7 +82,7 @@ services:
     appType: frontend
     name: hotel-frontend
     imageName: hotel-frontend
-    imageTag: "2cd1ed9"
+    imageTag: "705e35b"
     port: 3000
     probes:
       enabled: true
