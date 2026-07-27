@@ -106,7 +106,7 @@
 | **인프라** | CI/CD (GitHub Actions, 서비스별 변경 감지 빌드 + ECR push + Trivy 스캔) | ✅ 완료 |
 | **Observability** | 메트릭 (Micrometer + Prometheus, 4개 서비스 전체) | ✅ 완료 |
 | **Observability** | Grafana 대시보드 (요청량·에러율·p95·JVM 힙·로그, 자동 프로비저닝) | ✅ 완료 |
-| **Observability** | 로그 (Loki, Logback → 직접 push) | ✅ 완료 (로컬), 🚧 클러스터에서 일부 서비스 로그 유실 조사 중 |
+| **Observability** | 로그 (Loki, Logback → 직접 push) | ✅ 완료 |
 | **Observability** | 분산 추적 (Micrometer Tracing + OTel + Tempo, 서비스 간 전파 확인) | ✅ 완료 |
 | **Observability** | 로그 ↔ 트레이스 상호 점프 (Grafana derivedFields / tracesToLogsV2) | ✅ 완료 |
 | **Observability** | 클러스터(dev) 배포 (kube-prometheus-stack/Loki/Tempo + ServiceMonitor + EBS PVC 영구 저장) | ✅ 완료 |
