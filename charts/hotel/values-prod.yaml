@@ -57,7 +57,7 @@ services:
     enabled: true
     name: hotel-svc-event
     imageName: hotel-svc-event
-    imageTag: "46397c2"
+    imageTag: "3de9ce5"
     port: 8084
     env:
       SEARCH_SERVICE_BASE_URL: "http://hotel-svc-search:8085"
@@ -65,7 +65,7 @@ services:
     enabled: true
     name: hotel-svc-notice
     imageName: hotel-svc-notice
-    imageTag: "pending"
+    imageTag: "3de9ce5"
     port: 8086
   frontend:
     enabled: true
