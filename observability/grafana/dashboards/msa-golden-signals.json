@@ -92,7 +92,7 @@
       "targets": [
         {
           "datasource": { "type": "loki", "uid": "loki" },
-          "expr": "{app=~\"user-service|event-service|search-service\"}",
+          "expr": "{app=~\"user-service|event-service|search-service|notice-service\"}",
           "refId": "A"
         }
       ],
