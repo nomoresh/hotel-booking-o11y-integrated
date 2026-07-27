@@ -6,9 +6,11 @@ import com.hotel.event_service.repository.BookingRepository;
 import com.hotel.event_service.repository.EventDealRepository;
 import com.hotel.event_service.security.JwtTokenProvider;
 import com.hotel.event_service.service.InventoryService;
+import com.hotel.event_service.service.NotificationPublisher;
 import com.hotel.event_service.service.PricingService;
 import com.hotel.event_service.service.QueueService;
 import jakarta.validation.Valid;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -20,6 +22,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
+@Slf4j
 @RestController
 @RequestMapping("/api/v1/bookings")
 public class BookingController {
@@ -30,6 +33,7 @@ public class BookingController {
     private final PricingService pricingService;
     private final JwtTokenProvider jwtTokenProvider;
     private final QueueService queueService;
+    private final NotificationPublisher notificationPublisher;
 
     public BookingController(
             BookingRepository bookingRepository,
@@ -37,7 +41,8 @@ public class BookingController {
             InventoryService inventoryService,
             PricingService pricingService,
             JwtTokenProvider jwtTokenProvider,
-            QueueService queueService
+            QueueService queueService,
+            NotificationPublisher notificationPublisher
     ) {
         this.bookingRepository = bookingRepository;
         this.eventDealRepository = eventDealRepository;
@@ -45,6 +50,7 @@ public class BookingController {
         this.pricingService = pricingService;
         this.jwtTokenProvider = jwtTokenProvider;
         this.queueService = queueService;
+        this.notificationPublisher = notificationPublisher;
     }
 
     @GetMapping("/me")
@@ -130,6 +136,12 @@ public class BookingController {
             // 구매가 끝났으니 대기열 슬롯을 즉시 반납 (TTL 만료를 기다리지 않고 바로 다음 사람에게 자리를 넘김)
             if (isEventDeal) {
                 queueService.release(request.hotelId(), email);
+            }
+            // 알림은 예약 성공에 곁다리로 붙는 부가 기능이라, 발행이 실패해도 예약 자체는 그대로 성공 처리
+            try {
+                notificationPublisher.publishBookingCompleted(saved);
+            } catch (RuntimeException e) {
+                log.warn("Failed to publish booking notification for bookingId={}", saved.getId(), e);
             }
             return ResponseEntity.status(HttpStatus.CREATED).body(saved);
         } catch (RuntimeException e) {
