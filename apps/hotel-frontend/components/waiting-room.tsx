@@ -22,6 +22,7 @@ const POLL_INTERVAL_MS = 1500
 
 export function WaitingRoom({ isOpen, dealId, onSuccess }: WaitingRoomProps) {
   const [status, setStatus] = useState<QueueStatusResponse | null>(null)
+  const [displaySeconds, setDisplaySeconds] = useState<number | null>(null)
   const hasFinishedRef = useRef(false)
 
   // 실제 대기열 진입 + 주기적 상태 폴링 (더 이상 Math.random() 연출이 아니라 진짜 서버 상태)
@@ -29,6 +30,7 @@ export function WaitingRoom({ isOpen, dealId, onSuccess }: WaitingRoomProps) {
     if (!isOpen) {
       hasFinishedRef.current = false
       setStatus(null)
+      setDisplaySeconds(null)
       return
     }
 
@@ -56,6 +58,24 @@ export function WaitingRoom({ isOpen, dealId, onSuccess }: WaitingRoomProps) {
     }
   }, [isOpen, dealId])
 
+  // 서버는 폴링 주기(1.5초)마다 "현재 순번 기준 예상 시간"을 다시 계산해서 내려줄 뿐,
+  // 1초 단위로 줄어드는 카운트다운이 아니다 — 그대로 쓰면 순번이 안 바뀌는 동안 숫자가
+  // 멈춰있는 것처럼 보인다. 새로 내려온 값으로 로컬 카운트다운을 재동기화(resync)만 하고,
+  // 실제로 눈에 보이는 매초 감소는 아래 타이머가 화면에서만 담당한다.
+  useEffect(() => {
+    if (status?.estimatedSeconds != null) {
+      setDisplaySeconds(status.estimatedSeconds)
+    }
+  }, [status?.estimatedSeconds])
+
+  useEffect(() => {
+    if (!isOpen) return
+    const tick = setInterval(() => {
+      setDisplaySeconds((prev) => (prev != null && prev > 0 ? prev - 1 : prev))
+    }, 1000)
+    return () => clearInterval(tick)
+  }, [isOpen])
+
   // 승격(ADMITTED) 감지: onSuccess는 여기서 정확히 한 번만 호출
   // 발급받은 admissionToken을 그대로 넘겨서, 예약 API 호출 시 "대기열을 통과했다"는 증거로 쓰게 한다.
   useEffect(() => {
@@ -68,7 +88,7 @@ export function WaitingRoom({ isOpen, dealId, onSuccess }: WaitingRoomProps) {
   if (!isOpen) return null
 
   const waitingCount = status?.totalWaiting ?? 0
-  const estimatedSeconds = status?.estimatedSeconds ?? 0
+  const estimatedSeconds = displaySeconds ?? status?.estimatedSeconds ?? 0
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-foreground/60 backdrop-blur-sm p-4">
