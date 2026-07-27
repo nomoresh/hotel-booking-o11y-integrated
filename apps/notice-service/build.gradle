@@ -1,0 +1,48 @@
+plugins {
+	id 'java'
+	id 'org.springframework.boot' version '3.5.16'
+	id 'io.spring.dependency-management' version '1.1.7'
+}
+
+group = 'com.hotel'
+version = '0.0.1-SNAPSHOT'
+
+java {
+	toolchain {
+		languageVersion = JavaLanguageVersion.of(21)
+	}
+}
+
+repositories {
+	mavenCentral()
+}
+
+// event-service와 마찬가지로 Lettuce(Redis 클라이언트)가 물고 오는 netty를 최신 패치 버전으로 고정
+// (CVE-2026-59901, Bzip2Decoder 무한루프 DoS — netty 모듈은 한 릴리스로 묶여 배포되므로 전체를 통일)
+configurations.all {
+	resolutionStrategy.eachDependency { details ->
+		if (details.requested.group == 'io.netty' && details.requested.name.startsWith('netty-')) {
+			details.useVersion '4.1.136.Final'
+		}
+	}
+}
+
+dependencies {
+	implementation 'org.springframework.boot:spring-boot-starter-web'
+	implementation 'org.springframework.boot:spring-boot-starter-data-redis'
+	implementation 'org.springframework.boot:spring-boot-starter-actuator'
+	implementation 'io.micrometer:micrometer-registry-prometheus'
+	implementation 'io.micrometer:micrometer-tracing-bridge-otel'
+	implementation 'io.opentelemetry:opentelemetry-exporter-otlp'
+	implementation 'com.github.loki4j:loki-logback-appender:2.0.3'
+	compileOnly 'org.projectlombok:lombok'
+	annotationProcessor 'org.projectlombok:lombok'
+	testImplementation 'org.springframework.boot:spring-boot-starter-test'
+	testCompileOnly 'org.projectlombok:lombok'
+	testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+	testAnnotationProcessor 'org.projectlombok:lombok'
+}
+
+tasks.named('test') {
+	useJUnitPlatform()
+}

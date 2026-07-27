@@ -8,6 +8,7 @@ on:
       - "apps/user-service/**"
       - "apps/search-service/**"
       - "apps/event-service/**"
+      - "apps/notice-service/**"
       - "apps/hotel-frontend/**"
       - ".github/workflows/cicd-dev.yaml"
 
@@ -18,6 +19,7 @@ on:
       - "apps/user-service/**"
       - "apps/search-service/**"
       - "apps/event-service/**"
+      - "apps/notice-service/**"
       - "apps/hotel-frontend/**"
       - ".github/workflows/cicd-dev.yaml"
 
@@ -55,6 +57,7 @@ jobs:
       user: ${{ steps.filter.outputs.user }}
       search: ${{ steps.filter.outputs.search }}
       event: ${{ steps.filter.outputs.event }}
+      notice: ${{ steps.filter.outputs.notice }}
       frontend: ${{ steps.filter.outputs.frontend }}
       build_all: ${{ steps.build_all.outputs.value }}
       matrix: ${{ steps.matrix.outputs.matrix }}
@@ -79,6 +82,8 @@ jobs:
               - 'apps/search-service/**'
             event:
               - 'apps/event-service/**'
+            notice:
+              - 'apps/notice-service/**'
             frontend:
               - 'apps/hotel-frontend/**'
 
@@ -100,6 +105,7 @@ jobs:
           USER_CHANGED: ${{ steps.filter.outputs.user }}
           SEARCH_CHANGED: ${{ steps.filter.outputs.search }}
           EVENT_CHANGED: ${{ steps.filter.outputs.event }}
+          NOTICE_CHANGED: ${{ steps.filter.outputs.notice }}
           FRONTEND_CHANGED: ${{ steps.filter.outputs.frontend }}
         run: |
           python - <<'PY'
@@ -138,6 +144,16 @@ jobs:
                   "changed_output": "event",
                   "service_type": "backend",
                   "changed": os.environ["EVENT_CHANGED"] == "true",
+              },
+              {
+                  "service_key": "notice",
+                  "service_name": "notice-service",
+                  "context": "apps/notice-service",
+                  "ecr_repo": "hotel-svc-notice",
+                  "values_key": "notice",
+                  "changed_output": "notice",
+                  "service_type": "backend",
+                  "changed": os.environ["NOTICE_CHANGED"] == "true",
               },
               {
                   "service_key": "frontend",
@@ -357,6 +373,12 @@ jobs:
              [ "${{ needs.detect-changes.outputs.event }}" = "true" ]; then
             yq -i '.services.event.imageName = "hotel-svc-event"' "$VALUES_FILE"
             yq -i '.services.event.imageTag = "${{ env.IMAGE_TAG }}"' "$VALUES_FILE"
+          fi
+
+          if [ "${{ needs.detect-changes.outputs.build_all }}" = "true" ] || \
+             [ "${{ needs.detect-changes.outputs.notice }}" = "true" ]; then
+            yq -i '.services.notice.imageName = "hotel-svc-notice"' "$VALUES_FILE"
+            yq -i '.services.notice.imageTag = "${{ env.IMAGE_TAG }}"' "$VALUES_FILE"
           fi
 
           if [ "${{ needs.detect-changes.outputs.build_all }}" = "true" ] || \

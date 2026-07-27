@@ -66,6 +66,15 @@ services:
       SEARCH_SERVICE_BASE_URL: "http://hotel-svc-search:8085"
       LOKI_PUSH_URL: "http://loki.monitoring.svc.cluster.local:3100/loki/api/v1/push"
       OTLP_TRACING_ENDPOINT: "http://tempo.monitoring.svc.cluster.local:4318/v1/traces"
+  notice:
+    enabled: true
+    name: hotel-svc-notice
+    imageName: hotel-svc-notice
+    imageTag: "pending"
+    port: 8086
+    env:
+      LOKI_PUSH_URL: "http://loki.monitoring.svc.cluster.local:3100/loki/api/v1/push"
+      OTLP_TRACING_ENDPOINT: "http://tempo.monitoring.svc.cluster.local:4318/v1/traces"
   frontend:
     enabled: true
     appType: frontend

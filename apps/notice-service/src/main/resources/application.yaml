@@ -1,0 +1,33 @@
+server:
+  port: 8086 # 비동기 알림
+
+spring:
+  application:
+    name: notice-service
+  data:
+    redis:
+      host: localhost
+      port: 6379
+
+# event-service가 예약 완료 시 발행하는 Redis Stream 설정.
+# 서비스 재시작 시 컨슈머 그룹이 이미 있으면 에러 나므로 그룹 생성은 코드에서 존재 여부 확인 후 생성.
+notice:
+  stream:
+    key: booking-notifications
+    group: notice-service-group
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  metrics:
+    distribution:
+      percentiles-histogram:
+        http.server.requests: true
+  tracing:
+    sampling:
+      probability: 1.0 # 로컬 데모용 — 모든 요청을 샘플링 (운영에서는 낮춰야 함)
+  otlp:
+    tracing:
+      endpoint: ${OTLP_TRACING_ENDPOINT:http://localhost:4318/v1/traces}
